@@ -4,15 +4,21 @@
 //!
 //! To capture precisely the notion of ssb values, we chose to not reuse serde traits directly, but
 //! define our own. There are also some minor differences to serde, e.g. ssb collections must always
-//! know their complete size when starting serialization, as some serialization formats rely on that
-//! knowledge.
+//! know their complete size when starting serialization, and ssb data formats are always fully
+//! self-describing.
 
 use std::cmp::Ordering;
+use std::fmt;
 
 pub mod serializer;
 pub mod deserializer;
 pub mod serialize;
 pub mod deserialize;
+
+pub use self::serializer::Serializer;
+pub use self::deserializer::Deserializer;
+pub use self::serialize::Serialize;
+pub use self::deserialize::{Deserialize, DeserializeOwned, DeserializeSeed};
 
 /// A wrapper around `f64` to indicate that the float is compatible with the ssb legacy message
 /// data model, i.e. it is neither an infinity, nor `-0.0`, nor a `NaN`. Putting one of these into
@@ -21,7 +27,7 @@ pub mod deserialize;
 /// Because of these constrainst, it can implement `Eq` and `Ord`, which regular `f64` does not.
 ///
 /// Use the `From` or `Into` implementation to access the wrapped value.
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, PartialEq, PartialOrd)]
 pub struct LegacyF64(f64);
 
 impl LegacyF64 {
@@ -51,9 +57,9 @@ impl LegacyF64 {
     }
 }
 
-impl From<LegacyF64> for f64 {
-    fn from(f: LegacyF64) -> Self {
-        f.0
+impl fmt::Debug for LegacyF64 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        self.0.fmt(f)
     }
 }
 
@@ -62,5 +68,11 @@ impl Eq for LegacyF64 {}
 impl Ord for LegacyF64 {
     fn cmp(&self, other: &Self) -> Ordering {
         self.partial_cmp(other).unwrap()
+    }
+}
+
+impl From<LegacyF64> for f64 {
+    fn from(f: LegacyF64) -> Self {
+        f.0
     }
 }
