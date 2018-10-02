@@ -14,44 +14,41 @@ pub trait Serializer: Sized {
     /// [`io::Write`]: https://doc.rust-lang.org/std/io/trait.Write.html
     type Ok;
 
-    /// The error type when some error occurs during serialization.
-    type Error;
-
     /// Type returned from [`serialize_array`] for serializing into an array.
     ///
     /// [`serialize_array`]: #tymethod.serialize_array
-    type SerializeArray: SerializeArray<Ok = Self::Ok, Error = Self::Error>;
+    type SerializeArray: SerializeArray<Ok = Self::Ok>;
 
     /// Type returned from [`serialize_object`] for serializing into an object.
     ///
     /// [`serialize_object`]: #tymethod.serialize_object
-    type SerializeObject: SerializeObject<Ok = Self::Ok, Error = Self::Error>;
+    type SerializeObject: SerializeObject<Ok = Self::Ok>;
 
     /// Serialize a `bool` value.
-    fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error>;
+    fn serialize_bool(self, v: bool) -> Self::Ok;
 
     /// Serialize a `LegacyF64` value.
-    fn serialize_f64(self, v: LegacyF64) -> Result<Self::Ok, Self::Error>;
+    fn serialize_f64(self, v: LegacyF64) -> Self::Ok;
 
     /// Serialize a `&str`.
-    fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error>;
+    fn serialize_str(self, v: &str) -> Self::Ok;
 
     /// Serialize to `null`.
-    fn serialize_null(self) -> Result<Self::Ok, Self::Error>;
+    fn serialize_null(self) -> Self::Ok;
 
     /// Begin to serialize to an array. This call must be followed by zero or more calls to
     /// `serialize_element`, then a call to `end`.
     ///
     /// The argument is the number of elements in the sequence. Unlike serde, ssb always requires
     /// this to be computable up front.
-    fn serialize_array(self, len: usize) -> Result<Self::SerializeArray, Self::Error>;
+    fn serialize_array(self, len: usize) -> Self::SerializeArray;
 
     /// Begin to serialize to an object. This call must be followed by zero or more
     /// calls to `serialize_key` and `serialize_value`, then a call to `end`.
     ///
     /// The argument is the number of elements in the sequence. Unlike serde, ssb always requires
     /// this to be computable up front.
-    fn serialize_object(self, len: usize) -> Result<Self::SerializeObject, Self::Error>;
+    fn serialize_object(self, len: usize) -> Self::SerializeObject;
 }
 
 /// Returned from `Serializer::serialize_array`.
@@ -59,15 +56,11 @@ pub trait SerializeArray {
     /// Must match the `Ok` type of our `Serializer`.
     type Ok;
 
-    /// Must match the `Error` type of our `Serializer`.
-    type Error;
-
     /// Serialize a sequence element.
-    fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
-        where T: Serialize;
+    fn serialize_element<T: ?Sized>(&mut self, value: &T) -> () where T: Serialize;
 
     /// Finish serializing a sequence.
-    fn end(self) -> Result<Self::Ok, Self::Error>;
+    fn end(self) -> Self::Ok;
 }
 
 /// Returned from `Serializer::serialize_object`.
@@ -75,16 +68,13 @@ pub trait SerializeObject {
     /// Must match the `Ok` type of our `Serializer`.
     type Ok;
 
-    /// Must match the `Error` type of our `Serializer`.
-    type Error;
-
     /// Serialize a map key.
     ///
     /// If possible, `Serialize` implementations are encouraged to use
     /// `serialize_entry` instead as it may be implemented more efficiently in
     /// some formats compared to a pair of calls to `serialize_key` and
     /// `serialize_value`.
-    fn serialize_key<T: ?Sized>(&mut self, key: &T) -> Result<(), Self::Error> where T: Serialize;
+    fn serialize_key<T: ?Sized>(&mut self, key: &T) -> () where T: Serialize;
 
     /// Serialize a map value.
     ///
@@ -92,8 +82,7 @@ pub trait SerializeObject {
     ///
     /// Calling `serialize_value` before `serialize_key` is incorrect and is
     /// allowed to panic or produce bogus results.
-    fn serialize_value<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
-        where T: Serialize;
+    fn serialize_value<T: ?Sized>(&mut self, value: &T) -> () where T: Serialize;
 
     /// Serialize an object entry consisting of a key and a value.
     ///
@@ -111,17 +100,14 @@ pub trait SerializeObject {
     ///
     /// [`serialize_key`]: #tymethod.serialize_key
     /// [`serialize_value`]: #tymethod.serialize_value
-    fn serialize_entry<K: ?Sized, V: ?Sized>(&mut self,
-                                             key: &K,
-                                             value: &V)
-                                             -> Result<(), Self::Error>
+    fn serialize_entry<K: ?Sized, V: ?Sized>(&mut self, key: &K, value: &V) -> ()
         where K: Serialize,
               V: Serialize
     {
-        try!(self.serialize_key(key));
-        self.serialize_value(value)
+        self.serialize_key(key);
+        self.serialize_value(value);
     }
 
     /// Finish serializing an object.
-    fn end(self) -> Result<Self::Ok, Self::Error>;
+    fn end(self) -> Self::Ok;
 }
