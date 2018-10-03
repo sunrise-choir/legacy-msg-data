@@ -5,6 +5,7 @@ use encode_unicode::{Utf8Char, Utf16Char, U16UtfExt};
 use super::super::abstract_::{self, Visitor, LegacyF64, DeserializeSeed};
 
 /// Everything that can go wrong during deserialization.
+#[derive(PartialEq, Eq, Debug, Copy, Clone)]
 pub enum Error {
     /// Needed more data but got EOF instead.
     UnexpectedEndOfInput,
@@ -13,7 +14,9 @@ pub enum Error {
     /// A number is valid json but it evaluates to -0 or an infinity
     InvalidNumber,
     /// The content of a string is not utf8, uses wrong escape sequences, etc.
-    InvalidStringContent, // TODO implement a bunch of `From` traits for clearer parsing code with the `?` operator
+    InvalidStringContent,
+    /// An object has multiple entries with the equal keys.
+    DuplicateKey,
     ExpectedBool,
     ExpectedNumber,
     ExpectedString,
@@ -453,7 +456,9 @@ impl<'de, 'a> abstract_::deserializer::ArrayAccess<'de> for &'a mut Deserializer
 impl<'de, 'a> abstract_::deserializer::ObjectAccess<'de> for &'a mut Deserializer<'de> {
     type Error = Error;
 
-    fn next_key_seed<K>(&mut self, _seed: K) -> Result<Option<String>> {
+    fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<String>>
+        where K: abstract_::deserializer::ObjectAccessState
+    {
         // Object ends at `}`
         if let 0x7D = self.peek_ws()? {
             return Ok(None);
@@ -467,7 +472,14 @@ impl<'de, 'a> abstract_::deserializer::ObjectAccess<'de> for &'a mut Deserialize
         }
 
         self.consume_until(is_ws)?;
-        self.parse_string().map(Some)
+
+        let key = self.parse_string()?;
+
+        if seed.has_key(&key) {
+            Err(Error::DuplicateKey)
+        } else {
+            Ok(Some(key))
+        }
     }
 
     fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value>
@@ -478,5 +490,20 @@ impl<'de, 'a> abstract_::deserializer::ObjectAccess<'de> for &'a mut Deserialize
 
         self.consume_until(is_ws)?;
         seed.deserialize(&mut **self)
+    }
+
+    /// Can't correctly decode ssb messages without using state for detecting duplicat keys.
+    fn next_key<K>(&mut self) -> Result<Option<String>>
+        where K: abstract_::deserializer::ObjectAccessState
+    {
+        panic!()
+    }
+
+    /// Can't correctly decode ssb messages without using state for detecting duplicat keys.
+    fn next_entry<K, V>(&mut self) -> Result<Option<(String, V)>>
+        where K: abstract_::deserializer::ObjectAccessState,
+              V: abstract_::deserialize::Deserialize<'de>
+    {
+        panic!()
     }
 }

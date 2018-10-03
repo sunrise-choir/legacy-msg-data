@@ -186,6 +186,21 @@ impl<'de, 'a, A> ArrayAccess<'de> for &'a mut A
 
 ////////////////////////////////////////////////////////////////////////////////
 
+/// Trait for the state needed to deserialize objects.
+pub trait ObjectAccessState {
+    /// Check whether this key has already been encountered.
+    fn has_key(self, key: &str) -> bool;
+}
+
+/// This implementation always returns true, which makes stateless decoders unusable. That's by
+/// design, a valid ssb legacy format decoder must use state to check that no keys are used
+/// multiple times.
+impl<T> ObjectAccessState for PhantomData<T> {
+    fn has_key(self, _key: &str) -> bool {
+        true
+    }
+}
+
 /// Provides a `Visitor` access to each entry of an object in the input.
 ///
 /// This is a trait that a `Deserializer` passes to a `Visitor` implementation.
@@ -199,7 +214,9 @@ pub trait ObjectAccess<'de> {
     ///
     /// `Deserialize` implementations should typically use
     /// `ObjectAccess::next_key` or `ObjectAccess::next_entry` instead.
-    fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<String>, Self::Error>;
+    fn next_key_seed<K: ObjectAccessState>(&mut self,
+                                           seed: K)
+                                           -> Result<Option<String>, Self::Error>;
 
     /// This returns a `Ok(value)` for the next value in the map.
     ///
@@ -226,7 +243,8 @@ pub trait ObjectAccess<'de> {
                              kseed: K,
                              vseed: V)
                              -> Result<Option<(String, V::Value)>, Self::Error>
-        where V: DeserializeSeed<'de>
+        where K: ObjectAccessState,
+              V: DeserializeSeed<'de>
     {
         match try!(self.next_key_seed(kseed)) {
             Some(key) => {
@@ -243,7 +261,7 @@ pub trait ObjectAccess<'de> {
     /// This method exists as a convenience for `Deserialize` implementations.
     /// `ObjectAccess` implementations should not override the default behavior.
     #[inline]
-    fn next_key<K>(&mut self) -> Result<Option<String>, Self::Error> {
+    fn next_key<K: ObjectAccessState>(&mut self) -> Result<Option<String>, Self::Error> {
         self.next_key_seed::<PhantomData<()>>(PhantomData)
     }
 
@@ -270,7 +288,8 @@ pub trait ObjectAccess<'de> {
     /// `ObjectAccess` implementations should not override the default behavior.
     #[inline]
     fn next_entry<K, V>(&mut self) -> Result<Option<(String, V)>, Self::Error>
-        where V: Deserialize<'de>
+        where K: ObjectAccessState,
+              V: Deserialize<'de>
     {
         self.next_entry_seed::<PhantomData<()>, _>(PhantomData, PhantomData)
     }
@@ -287,7 +306,9 @@ impl<'de, 'a, A> ObjectAccess<'de> for &'a mut A
     type Error = A::Error;
 
     #[inline]
-    fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<String>, Self::Error> {
+    fn next_key_seed<K: ObjectAccessState>(&mut self,
+                                           seed: K)
+                                           -> Result<Option<String>, Self::Error> {
         (**self).next_key_seed(seed)
     }
 
@@ -303,20 +324,21 @@ impl<'de, 'a, A> ObjectAccess<'de> for &'a mut A
                              kseed: K,
                              vseed: V)
                              -> Result<Option<(String, V::Value)>, Self::Error>
-        where V: DeserializeSeed<'de>
+        where K: ObjectAccessState,
+              V: DeserializeSeed<'de>
     {
         (**self).next_entry_seed(kseed, vseed)
     }
 
     #[inline]
-    fn next_entry<K, V>(&mut self) -> Result<Option<(String, V)>, Self::Error>
+    fn next_entry<K: ObjectAccessState, V>(&mut self) -> Result<Option<(String, V)>, Self::Error>
         where V: Deserialize<'de>
     {
         (**self).next_entry::<PhantomData<()>, _>()
     }
 
     #[inline]
-    fn next_key<K>(&mut self) -> Result<Option<String>, Self::Error> {
+    fn next_key<K: ObjectAccessState>(&mut self) -> Result<Option<String>, Self::Error> {
         (**self).next_key::<PhantomData<()>>()
     }
 

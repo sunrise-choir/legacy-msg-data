@@ -9,8 +9,20 @@ use super::super::abstract_::{
         Serializer,
         SerializeArray,
         SerializeObject,
+    },
+    deserialize::Deserialize,
+    deserializer::{
+        Deserializer,
+        Visitor,
+        ArrayAccess,
+        ObjectAccess,
+        ObjectAccessState,
     }
 };
+
+// The maximum capacity of entries to preallocate for arrays and objects. Even if malicious input
+// claims to contain a much larger collection, only this much memory will be blindly allocated.
+static MAX_ALLOC: usize = 2048;
 
 /// Represents any valid ssb legacy message value, analogous to [serde_json::Value](https://docs.serde.rs/serde_json/value/enum.Value.html).
 pub enum Value {
@@ -51,6 +63,70 @@ impl Serialize for Value {
     }
 }
 
+impl<'de> Deserialize<'de> for Value {
+    fn deserialize<D>(deserializer: D) -> Result<Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_any(ValueVisitor)
+    }
+}
+
+struct ValueVisitor;
+
+impl<'a, V> ObjectAccessState for &'a HashMap<String, V> {
+    fn has_key(self, key: &str) -> bool {
+        self.contains_key(key)
+    }
+}
+
+impl<'de> Visitor<'de> for ValueVisitor {
+    type Value = Value;
+
+    fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E> {
+        Ok(Value::Bool(v))
+    }
+
+    fn visit_f64<E>(self, v: LegacyF64) -> Result<Self::Value, E> {
+        Ok(Value::Float(v))
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> {
+        self.visit_string(v.to_string())
+    }
+
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E> {
+        Ok(Value::String(v))
+    }
+
+    fn visit_null<E>(self) -> Result<Self::Value, E> {
+        Ok(Value::Null)
+    }
+
+    fn visit_array<A>(self, mut seq: A) -> Result<Self::Value, A::Error> where A: ArrayAccess<'de> {
+        // use the size hint, but put a maximum to the allocation because we can't trust the input
+        let mut v = Vec::with_capacity(std::cmp::min(seq.size_hint().unwrap_or(0), MAX_ALLOC));
+
+        while let Some(inner) = seq.next_element()? {
+            v.push(inner);
+        }
+
+        Ok(Value::Array(v))
+    }
+
+    fn visit_object<A>(self, mut object: A) -> Result<Self::Value, A::Error> where A: ObjectAccess<'de> {
+        // use the size hint, but put a maximum to the allocation because we can't trust the input
+        let mut m = HashMap::with_capacity(std::cmp::min(object.size_hint().unwrap_or(0), MAX_ALLOC));
+
+
+        while let Some((key, val)) = object.next_entry_seed(&m, std::marker::PhantomData)? {
+            let _ = m.insert(key, val);
+        }
+
+        Ok(Value::Object(m))
+    }
+}
+
 /// Represents any valid ssb legacy message value, preserving the order of object entries. Prefer
 /// using `Value` instead of this, this should only be used for checking message signatures.
 pub enum ValueOrdered {
@@ -88,5 +164,69 @@ impl Serialize for ValueOrdered {
                 s.end()
             }
         }
+    }
+}
+
+impl<'de> Deserialize<'de> for ValueOrdered {
+    fn deserialize<D>(deserializer: D) -> Result<ValueOrdered, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_any(ValueOrderedVisitor)
+    }
+}
+
+struct ValueOrderedVisitor;
+
+impl<'a, V> ObjectAccessState for &'a IndexMap<String, V> {
+    fn has_key(self, key: &str) -> bool {
+        self.contains_key(key)
+    }
+}
+
+impl<'de> Visitor<'de> for ValueOrderedVisitor {
+    type Value = ValueOrdered;
+
+    fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E> {
+        Ok(ValueOrdered::Bool(v))
+    }
+
+    fn visit_f64<E>(self, v: LegacyF64) -> Result<Self::Value, E> {
+        Ok(ValueOrdered::Float(v))
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> {
+        self.visit_string(v.to_string())
+    }
+
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E> {
+        Ok(ValueOrdered::String(v))
+    }
+
+    fn visit_null<E>(self) -> Result<Self::Value, E> {
+        Ok(ValueOrdered::Null)
+    }
+
+    fn visit_array<A>(self, mut seq: A) -> Result<Self::Value, A::Error> where A: ArrayAccess<'de> {
+        // use the size hint, but put a maximum to the allocation because we can't trust the input
+        let mut v = Vec::with_capacity(std::cmp::min(seq.size_hint().unwrap_or(0), MAX_ALLOC));
+
+        while let Some(inner) = seq.next_element()? {
+            v.push(inner);
+        }
+
+        Ok(ValueOrdered::Array(v))
+    }
+
+    fn visit_object<A>(self, mut object: A) -> Result<Self::Value, A::Error> where A: ObjectAccess<'de> {
+        // use the size hint, but put a maximum to the allocation because we can't trust the input
+        let mut m = IndexMap::with_capacity(std::cmp::min(object.size_hint().unwrap_or(0), MAX_ALLOC));
+
+
+        while let Some((key, val)) = object.next_entry_seed(&m, std::marker::PhantomData)? {
+            let _ = m.insert(key, val);
+        }
+
+        Ok(ValueOrdered::Object(m))
     }
 }
