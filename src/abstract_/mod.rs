@@ -16,7 +16,7 @@ pub mod serialize;
 pub mod deserialize;
 
 pub use self::serializer::Serializer;
-pub use self::deserializer::Deserializer;
+pub use self::deserializer::{Deserializer, Visitor};
 pub use self::serialize::Serialize;
 pub use self::deserialize::{Deserialize, DeserializeOwned, DeserializeSeed};
 

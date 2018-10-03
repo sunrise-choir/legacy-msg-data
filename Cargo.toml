@@ -6,3 +6,4 @@ authors = ["AljoschaMeyer <mail@aljoscha-meyer.de>"]
 [dependencies]
 indexmap = "1.0.1"
 ryu-ecmascript = "0.1.0"
+encode_unicode = "0.3.2"

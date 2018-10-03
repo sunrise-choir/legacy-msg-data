@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use super::{Deserialize, DeserializeSeed};
+use super::{Deserialize, DeserializeSeed, LegacyF64};
 
 /// This trait defines the deserialization half of the ssb legacy message data model. It is analogous
 /// to [serde::Deserializer](https://docs.serde.rs/serde/trait.Deserializer.html). Some doc comments
@@ -66,8 +66,8 @@ pub trait Visitor<'de>: Sized {
     /// The input contains a boolean.
     fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>;
 
-    /// The input contains an `f64`.
-    fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>;
+    /// The input contains a `LegacyF64`.
+    fn visit_f64<E>(self, v: LegacyF64) -> Result<Self::Value, E>;
 
     /// The input contains a string. The lifetime of the string is ephemeral and
     /// it may be destroyed after this method returns.
@@ -91,7 +91,6 @@ pub trait Visitor<'de>: Sized {
     /// data outlives `'a`.
     ///
     /// The default implementation forwards to `visit_str`.
-    #[inline]
     fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E> {
         self.visit_str(v)
     }
@@ -111,8 +110,6 @@ pub trait Visitor<'de>: Sized {
     ///
     /// The default implementation forwards to `visit_str` and then drops the
     /// `String`.
-    #[inline]
-    #[cfg(any(feature = "std", feature = "alloc"))]
     fn visit_string<E>(self, v: String) -> Result<Self::Value, E> {
         self.visit_str(&v)
     }
@@ -158,10 +155,10 @@ pub trait ArrayAccess<'de> {
         self.next_element_seed(PhantomData)
     }
 
-    /// Returns the number of elements remaining in the array. Unlike in serde, this must always
-    /// be known.
-    #[inline]
-    fn size(&self) -> usize;
+    /// Returns the number of elements remaining in the array, if known.
+    fn size_hint(&self) -> Option<usize> {
+        None
+    }
 }
 
 impl<'de, 'a, A> ArrayAccess<'de> for &'a mut A
@@ -169,14 +166,12 @@ impl<'de, 'a, A> ArrayAccess<'de> for &'a mut A
 {
     type Error = A::Error;
 
-    #[inline]
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
         where T: DeserializeSeed<'de>
     {
         (**self).next_element_seed(seed)
     }
 
-    #[inline]
     fn next_element<T>(&mut self) -> Result<Option<T>, Self::Error>
         where T: Deserialize<'de>
     {
@@ -184,8 +179,8 @@ impl<'de, 'a, A> ArrayAccess<'de> for &'a mut A
     }
 
     #[inline]
-    fn size(&self) -> usize {
-        (**self).size()
+    fn size_hint(&self) -> Option<usize> {
+        (**self).size_hint()
     }
 }
 
@@ -204,8 +199,7 @@ pub trait ObjectAccess<'de> {
     ///
     /// `Deserialize` implementations should typically use
     /// `ObjectAccess::next_key` or `ObjectAccess::next_entry` instead.
-    fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
-        where K: DeserializeSeed<'de>;
+    fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<String>, Self::Error>;
 
     /// This returns a `Ok(value)` for the next value in the map.
     ///
@@ -231,9 +225,8 @@ pub trait ObjectAccess<'de> {
     fn next_entry_seed<K, V>(&mut self,
                              kseed: K,
                              vseed: V)
-                             -> Result<Option<(K::Value, V::Value)>, Self::Error>
-        where K: DeserializeSeed<'de>,
-              V: DeserializeSeed<'de>
+                             -> Result<Option<(String, V::Value)>, Self::Error>
+        where V: DeserializeSeed<'de>
     {
         match try!(self.next_key_seed(kseed)) {
             Some(key) => {
@@ -250,10 +243,8 @@ pub trait ObjectAccess<'de> {
     /// This method exists as a convenience for `Deserialize` implementations.
     /// `ObjectAccess` implementations should not override the default behavior.
     #[inline]
-    fn next_key<K>(&mut self) -> Result<Option<K>, Self::Error>
-        where K: Deserialize<'de>
-    {
-        self.next_key_seed(PhantomData)
+    fn next_key<K>(&mut self) -> Result<Option<String>, Self::Error> {
+        self.next_key_seed::<PhantomData<()>>(PhantomData)
     }
 
     /// This returns a `Ok(value)` for the next value in the map.
@@ -278,17 +269,16 @@ pub trait ObjectAccess<'de> {
     /// This method exists as a convenience for `Deserialize` implementations.
     /// `ObjectAccess` implementations should not override the default behavior.
     #[inline]
-    fn next_entry<K, V>(&mut self) -> Result<Option<(K, V)>, Self::Error>
-        where K: Deserialize<'de>,
-              V: Deserialize<'de>
+    fn next_entry<K, V>(&mut self) -> Result<Option<(String, V)>, Self::Error>
+        where V: Deserialize<'de>
     {
-        self.next_entry_seed(PhantomData, PhantomData)
+        self.next_entry_seed::<PhantomData<()>, _>(PhantomData, PhantomData)
     }
 
-    /// Returns the number of entries remaining in the object. Unlike in serde, this must always
-    /// be known.
-    #[inline]
-    fn size(&self) -> usize;
+    /// Returns the number of elements remaining in the object, if known.
+    fn size_hint(&self) -> Option<usize> {
+        None
+    }
 }
 
 impl<'de, 'a, A> ObjectAccess<'de> for &'a mut A
@@ -297,9 +287,7 @@ impl<'de, 'a, A> ObjectAccess<'de> for &'a mut A
     type Error = A::Error;
 
     #[inline]
-    fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
-        where K: DeserializeSeed<'de>
-    {
+    fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<String>, Self::Error> {
         (**self).next_key_seed(seed)
     }
 
@@ -314,26 +302,22 @@ impl<'de, 'a, A> ObjectAccess<'de> for &'a mut A
     fn next_entry_seed<K, V>(&mut self,
                              kseed: K,
                              vseed: V)
-                             -> Result<Option<(K::Value, V::Value)>, Self::Error>
-        where K: DeserializeSeed<'de>,
-              V: DeserializeSeed<'de>
+                             -> Result<Option<(String, V::Value)>, Self::Error>
+        where V: DeserializeSeed<'de>
     {
         (**self).next_entry_seed(kseed, vseed)
     }
 
     #[inline]
-    fn next_entry<K, V>(&mut self) -> Result<Option<(K, V)>, Self::Error>
-        where K: Deserialize<'de>,
-              V: Deserialize<'de>
+    fn next_entry<K, V>(&mut self) -> Result<Option<(String, V)>, Self::Error>
+        where V: Deserialize<'de>
     {
-        (**self).next_entry()
+        (**self).next_entry::<PhantomData<()>, _>()
     }
 
     #[inline]
-    fn next_key<K>(&mut self) -> Result<Option<K>, Self::Error>
-        where K: Deserialize<'de>
-    {
-        (**self).next_key()
+    fn next_key<K>(&mut self) -> Result<Option<String>, Self::Error> {
+        (**self).next_key::<PhantomData<()>>()
     }
 
     #[inline]
@@ -344,7 +328,7 @@ impl<'de, 'a, A> ObjectAccess<'de> for &'a mut A
     }
 
     #[inline]
-    fn size(&self) -> usize {
-        (**self).size()
+    fn size_hint(&self) -> Option<usize> {
+        (**self).size_hint()
     }
 }

@@ -2,8 +2,6 @@ use std::marker::PhantomData;
 
 use super::Deserializer;
 
-// TODO impl these for std types
-
 /// A **data structure** that can be deserialized from any ssb legacy message
 /// data format.
 pub trait Deserialize<'de>: Sized {
