@@ -6,6 +6,6 @@ authors = ["AljoschaMeyer <mail@aljoscha-meyer.de>"]
 [dependencies]
 indexmap = "1.0.1"
 ryu-ecmascript = "0.1.0"
-# strtod = "0.0.1"
-strtod = { path = "../strtod" }
+# strtod = "0.0.2"
+strtod = { git = "https://github.com/ssbrs/strtod" }
 encode_unicode = "0.3.2"
