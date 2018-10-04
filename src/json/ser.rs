@@ -17,7 +17,7 @@ pub struct JsonSerializer<W> {
     writer: W,
     compact: bool, // if true omits whitespace, else produces the signing format
     indent: usize,
-    remaining_len: usize, // state for collection serialization
+    first_elem: bool, // state for collection serialization
 }
 
 impl<W> JsonSerializer<W>
@@ -29,7 +29,7 @@ impl<W> JsonSerializer<W>
     /// set `compact` to `false`.
     #[inline]
     pub fn new(writer: W, compact: bool) -> Self {
-        JsonSerializer { writer, compact, indent: 0, remaining_len: 0 }
+        JsonSerializer { writer, compact, indent: 0, first_elem: true }
     }
 
     /// Unwrap the `Writer` from the `Serializer`.
@@ -105,38 +105,38 @@ impl<'a, W> Serializer for &'a mut JsonSerializer<W>
 
         for byte in v.bytes() {
             match byte {
-                0x00 => self.writer.write_all(br"\u00")?,
-                0x01 => self.writer.write_all(br"\u01")?,
-                0x02 => self.writer.write_all(br"\u02")?,
-                0x03 => self.writer.write_all(br"\u03")?,
-                0x04 => self.writer.write_all(br"\u04")?,
-                0x05 => self.writer.write_all(br"\u05")?,
-                0x06 => self.writer.write_all(br"\u06")?,
-                0x07 => self.writer.write_all(br"\u07")?,
+                0x00 => self.writer.write_all(br"\u0000")?,
+                0x01 => self.writer.write_all(br"\u0001")?,
+                0x02 => self.writer.write_all(br"\u0002")?,
+                0x03 => self.writer.write_all(br"\u0003")?,
+                0x04 => self.writer.write_all(br"\u0004")?,
+                0x05 => self.writer.write_all(br"\u0005")?,
+                0x06 => self.writer.write_all(br"\u0006")?,
+                0x07 => self.writer.write_all(br"\u0007")?,
                 0x08 => self.writer.write_all(br"\b")?,
-                0x09 => self.writer.write_all(br"\u09")?,
+                0x09 => self.writer.write_all(br"\t")?,
                 0x0A => self.writer.write_all(br"\n")?,
-                0x0B => self.writer.write_all(br"\t")?,
+                0x0B => self.writer.write_all(br"\u000B")?,
                 0x0C => self.writer.write_all(br"\f")?,
                 0x0D => self.writer.write_all(br"\r")?,
-                0x0E => self.writer.write_all(br"\u0e")?,
-                0x0F => self.writer.write_all(br"\u0f")?,
-                0x10 => self.writer.write_all(br"\u10")?,
-                0x11 => self.writer.write_all(br"\u11")?,
-                0x12 => self.writer.write_all(br"\u12")?,
-                0x13 => self.writer.write_all(br"\u13")?,
-                0x14 => self.writer.write_all(br"\u14")?,
-                0x15 => self.writer.write_all(br"\u15")?,
-                0x16 => self.writer.write_all(br"\u16")?,
-                0x17 => self.writer.write_all(br"\u17")?,
-                0x18 => self.writer.write_all(br"\u18")?,
-                0x19 => self.writer.write_all(br"\u19")?,
-                0x1A => self.writer.write_all(br"\u1a")?,
-                0x1B => self.writer.write_all(br"\u1b")?,
-                0x1C => self.writer.write_all(br"\u1c")?,
-                0x1D => self.writer.write_all(br"\u1d")?,
-                0x1E => self.writer.write_all(br"\u1e")?,
-                0x1F => self.writer.write_all(br"\u1f")?,
+                0x0E => self.writer.write_all(br"\u000e")?,
+                0x0F => self.writer.write_all(br"\u000f")?,
+                0x10 => self.writer.write_all(br"\u0010")?,
+                0x11 => self.writer.write_all(br"\u0011")?,
+                0x12 => self.writer.write_all(br"\u0012")?,
+                0x13 => self.writer.write_all(br"\u0013")?,
+                0x14 => self.writer.write_all(br"\u0014")?,
+                0x15 => self.writer.write_all(br"\u0015")?,
+                0x16 => self.writer.write_all(br"\u0016")?,
+                0x17 => self.writer.write_all(br"\u0017")?,
+                0x18 => self.writer.write_all(br"\u0018")?,
+                0x19 => self.writer.write_all(br"\u0019")?,
+                0x1A => self.writer.write_all(br"\u001a")?,
+                0x1B => self.writer.write_all(br"\u001b")?,
+                0x1C => self.writer.write_all(br"\u001c")?,
+                0x1D => self.writer.write_all(br"\u001d")?,
+                0x1E => self.writer.write_all(br"\u001e")?,
+                0x1F => self.writer.write_all(br"\u001f")?,
                 0x22 => self.writer.write_all(b"\\\"")?,
                 0x5C => self.writer.write_all(br"\\")?,
                 other => self.writer.write_all(&[other])?,
@@ -150,7 +150,7 @@ impl<'a, W> Serializer for &'a mut JsonSerializer<W>
         self.writer.write_all(b"null")
     }
 
-    fn serialize_array(self, len: usize) -> Result<Self::SerializeArray, Self::Error> {
+    fn serialize_array(self, _len: usize) -> Result<Self::SerializeArray, Self::Error> {
         self.writer.write_all(b"[")?;
 
         if !self.compact {
@@ -159,12 +159,12 @@ impl<'a, W> Serializer for &'a mut JsonSerializer<W>
             self.write_indent()?;
         }
 
-        self.remaining_len = len;
+        self.first_elem = true;
 
         Ok(self)
     }
 
-    fn serialize_object(self, len: usize) -> Result<Self::SerializeObject, Self::Error> {
+    fn serialize_object(self, _len: usize) -> Result<Self::SerializeObject, Self::Error> {
         self.writer.write_all(b"{")?;
 
         if !self.compact {
@@ -173,7 +173,7 @@ impl<'a, W> Serializer for &'a mut JsonSerializer<W>
             self.write_indent()?;
         }
 
-        self.remaining_len = len;
+        self.first_elem = true;
 
         Ok(self)
     }
@@ -190,12 +190,13 @@ where W: io::Write
             self.write_indent()?;
         }
 
-        value.serialize(&mut **self)?;
-
-        if self.remaining_len > 0 {
+        if self.first_elem {
+            self.first_elem = false;
+        } else {
             self.writer.write_all(b",")?;
-            self.remaining_len -= 1;
         }
+
+        value.serialize(&mut **self)?;
 
         if !self.compact {
             self.writer.write_all(b"\n")?;
@@ -225,6 +226,12 @@ where W: io::Write
             self.write_indent()?;
         }
 
+        if self.first_elem {
+            self.first_elem = false;
+        } else {
+            self.writer.write_all(b",")?;
+        }
+
         self.serialize_str(value)?;
 
         if self.compact {
@@ -236,11 +243,6 @@ where W: io::Write
 
     fn serialize_value<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error> where T: Serialize {
         value.serialize(&mut **self)?;
-
-        if self.remaining_len > 0 {
-            self.writer.write_all(b",")?;
-            self.remaining_len -= 1;
-        }
 
         if !self.compact {
             self.writer.write_all(b"\n")?;

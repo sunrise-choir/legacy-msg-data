@@ -17,6 +17,8 @@ pub enum Error {
     InvalidStringContent,
     /// An object has multiple entries with the equal keys.
     DuplicateKey,
+    /// The input contained valid json followed by at least one non-whitespace byte.
+    TrailingCharacters,
     ExpectedBool,
     ExpectedNumber,
     ExpectedString,
@@ -33,11 +35,26 @@ pub struct Deserializer<'de> {
     first: bool, // state for deserializing collections
 }
 
+impl<'de> Deserializer<'de> {
+    /// Check whether there are no non-whitespace tokens up until the end of the input.
+    pub fn end(&mut self) -> Result<()> {
+        match self.peek_ws() {
+            Ok(_) => Err(Error::TrailingCharacters),
+            Err(Error::UnexpectedEndOfInput) => Ok(()),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+/// Try to parse data from the input. Validates that there are no trailing non-whitespace bytes.
 pub fn from_slice<'de, T>(input: &'de [u8]) -> Result<T>
     where T: abstract_::DeserializeOwned
 {
     let mut de = Deserializer::from_slice(input);
-    abstract_::Deserialize::deserialize(&mut de)
+    match abstract_::Deserialize::deserialize(&mut de) {
+        Ok(t) => de.end().map(|_| t),
+        Err(e) => Err(e),
+    }
 }
 
 fn is_ws(byte: u8) -> bool {
@@ -68,15 +85,21 @@ impl<'de> Deserializer<'de> {
         }
     }
 
+    // Returns the next byte without consuming it, or signals end of input as `None`.
+    fn peek_or_end(&self) -> Option<u8> {
+        self.input.first().map(|b| *b)
+    }
+
     // Unsafely advance the input slice by 1 byte, to be used only after peeking.
     unsafe fn advance(&mut self) {
-        self.input = std::slice::from_raw_parts(self.input.as_ptr().offset(1), self.input.len());
+        self.input = std::slice::from_raw_parts(self.input.as_ptr().offset(1),
+                                                self.input.len() - 1);
     }
 
     // Unsafely advance the input slice by some bytes.
     unsafe fn advance_by(&mut self, offset: isize) {
         self.input = std::slice::from_raw_parts(self.input.as_ptr().offset(offset),
-                                                self.input.len());
+                                                self.input.len() - (offset as usize));
     }
 
     // Consumes the next byte and returns it.
@@ -127,6 +150,22 @@ impl<'de> Deserializer<'de> {
         }
     }
 
+    // Skips values while the predicate returns true.
+    fn advance_while(&mut self, pred: fn(u8) -> bool) -> () {
+        loop {
+            match self.peek_or_end() {
+                None => return,
+                Some(peeked) => {
+                    if pred(peeked) {
+                        unsafe { self.advance() };
+                    } else {
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
     // Consumes as much whitespace as possible, then peeks at the next non-whitespace byte.
     fn peek_ws(&mut self) -> Result<u8> {
         self.consume_until(is_ws)
@@ -166,49 +205,50 @@ impl<'de> Deserializer<'de> {
         let original_input = self.input;
 
         // trailing `-`
-        if self.peek()? == 0x2D {
-            unsafe { self.advance() };
+        match self.peek() {
+            Ok(0x2D) => unsafe { self.advance() },
+            Ok(_) => {}
+            Err(Error::UnexpectedEndOfInput) => return Err(Error::ExpectedNumber),
+            Err(e) => return Err(e),
         }
 
         let next = self.next()?;
         match next {
             // first digit `0` must be followed by `.`
-            0x30 => unsafe { self.advance() },
+            0x30 => {}
             // first digit nonzero, may be followed by more digits until the `.`
-            0x31...0x39 => {
-                unsafe {
-                    self.advance();
-                }
-                self.consume_until(is_digit)?;
-            }
+            0x31...0x39 => self.advance_while(is_digit),
             _ => return Err(Error::ExpectedNumber),
         }
 
         // `.`, followed by many1 digits
-        if self.peek()? == 0x2E {
+        if let Some(0x2E) = self.peek_or_end() {
             unsafe {
                 self.advance();
             }
             self.expect_pred(is_digit)?;
-            self.consume_until(is_digit)?;
+            self.advance_while(is_digit);
         }
 
         // `e` or `E`, followed by an optional sign and many1 digits
-        if self.peek()? == 0x45 || self.peek()? == 0x65 {
-            unsafe {
-                self.advance();
-            }
-
-            // optional `+` or `-`
-            if self.peek()? == 0x2B || self.peek()? == 0x2D {
+        match self.peek_or_end() {
+            Some(0x45) | Some(0x65) => {
                 unsafe {
                     self.advance();
                 }
-            }
 
-            // many1 digits
-            self.expect_pred(is_digit)?;
-            self.consume_until(is_digit)?;
+                // optional `+` or `-`
+                if self.peek()? == 0x2B || self.peek()? == 0x2D {
+                    unsafe {
+                        self.advance();
+                    }
+                }
+
+                // many1 digits
+                self.expect_pred(is_digit)?;
+                self.advance_while(is_digit);
+            }
+            _ => {}
         }
 
         // done parsing the number, convert it to a rust value
@@ -309,7 +349,7 @@ impl<'de> Deserializer<'de> {
                 }
 
                 // the control code points must be escaped
-                0x00...0x19 => return Err(Error::InvalidStringContent),
+                0x00...0x1F => return Err(Error::InvalidStringContent),
 
                 // a regular utf8-encoded code point (unless it is malformed)
                 _ => {
@@ -505,5 +545,21 @@ impl<'de, 'a> abstract_::deserializer::ObjectAccess<'de> for &'a mut Deserialize
               V: abstract_::deserialize::Deserialize<'de>
     {
         panic!()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::{Value, from_slice, to_vec};
+
+    #[test]
+    fn regression() {
+        let input = br##""\tr""##;
+        let val = from_slice::<Value>(input).unwrap();
+        let enc = to_vec(&val, true);
+        let enc_string = std::str::from_utf8(&enc).unwrap().to_string();
+        println!("{}\n{:?}\n{:x?}", enc_string, enc_string, enc);
+        let redecoded = from_slice::<Value>(&enc[..]).unwrap();
+        assert_eq!(val, redecoded);
     }
 }

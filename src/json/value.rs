@@ -25,6 +25,7 @@ use super::super::abstract_::{
 static MAX_ALLOC: usize = 2048;
 
 /// Represents any valid ssb legacy message value, analogous to [serde_json::Value](https://docs.serde.rs/serde_json/value/enum.Value.html).
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Value {
     Null,
     Bool(bool),
@@ -129,6 +130,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
 
 /// Represents any valid ssb legacy message value, preserving the order of object entries. Prefer
 /// using `Value` instead of this, this should only be used for checking message signatures.
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum ValueOrdered {
     Null,
     Bool(bool),
