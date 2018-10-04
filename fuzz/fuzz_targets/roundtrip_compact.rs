@@ -15,21 +15,4 @@ fuzz_target!(|data: &[u8]| {
         }
         Err(_) => {}
     }
-    // match from_slice::<Value>(data) {
-    //     Ok(val) => {
-    //         let sign_json = to_vec(&val, true);
-    //         let foo = String::from_utf8(sign_json.clone()).unwrap_or("ERR".to_string());
-    //         let input_string = std::str::from_utf8(data).unwrap().to_string();
-    //         println!("\ninput  : {:x?}\nsigning: {:x?}\noriginal_string: {}\nsigning_string: {}",
-    //                  data,
-    //                  &sign_json[..],
-    //                  input_string,
-    //                  foo);
-    //
-    //         let redecoded = from_slice::<Value>(&sign_json[..]).unwrap();
-    //         println!("original : {:?}\nredecoded: {:?}\n\n", val, redecoded);
-    //         assert_eq!(val, redecoded);
-    //     }
-    //     Err(_) => {}
-    // }
 });

@@ -1,6 +1,5 @@
-use std::str::FromStr;
-
 use encode_unicode::{Utf8Char, Utf16Char, U16UtfExt};
+use strtod::strtod;
 
 use super::super::abstract_::{self, Visitor, LegacyF64, DeserializeSeed};
 
@@ -252,15 +251,16 @@ impl<'de> Deserializer<'de> {
         }
 
         // done parsing the number, convert it to a rust value
-        let parsed = f64::from_str(unsafe {
-                                       std::str::from_utf8_unchecked(&original_input
-                                                                          [..(original_input.len() -
-                                                                         self.input.len())])
-                                   })
-                .unwrap();
-
-        match LegacyF64::from_f64(parsed) {
-            Some(f) => Ok(f),
+        match strtod(unsafe {
+                         std::str::from_utf8_unchecked(&original_input[..(original_input.len() -
+                                                           self.input.len())])
+                     }) {
+            Some(parsed) => {
+                match LegacyF64::from_f64(parsed) {
+                    Some(f) => Ok(f),
+                    None => Err(Error::InvalidNumber),
+                }
+            }
             None => Err(Error::InvalidNumber),
         }
     }
@@ -552,14 +552,20 @@ impl<'de, 'a> abstract_::deserializer::ObjectAccess<'de> for &'a mut Deserialize
 mod tests {
     use super::super::{Value, from_slice, to_vec};
 
-    #[test]
-    fn regression() {
-        let input = br##""\tr""##;
+    fn check(input: &[u8]) {
         let val = from_slice::<Value>(input).unwrap();
         let enc = to_vec(&val, true);
         let enc_string = std::str::from_utf8(&enc).unwrap().to_string();
         println!("{}\n{:?}\n{:x?}", enc_string, enc_string, enc);
         let redecoded = from_slice::<Value>(&enc[..]).unwrap();
         assert_eq!(val, redecoded);
+    }
+
+    #[test]
+    fn regression() {
+        check(b"888e-39919999992999999999999999999999999999999999993");
+        // check(br##"11111111111111111111111111111111111111111111111111111111111111111111111111e-323"##);
+        // check(br##"8391.8999999999999999999928e-328e-8"##);
+        // check(br##"839999999999999999999928e-338e-9"##);
     }
 }
