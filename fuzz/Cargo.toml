@@ -1,0 +1,26 @@
+
+[package]
+name = "ssb-legacy-msg-fuzz"
+version = "0.0.1"
+authors = ["Automatically generated"]
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies.ssb-legacy-msg]
+path = ".."
+[dependencies.libfuzzer-sys]
+git = "https://github.com/rust-fuzz/libfuzzer-sys.git"
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "roundtrip_signing"
+path = "fuzz_targets/roundtrip_signing.rs"
+
+[[bin]]
+name = "roundtrip_compact"
+path = "fuzz_targets/roundtrip_compact.rs"
