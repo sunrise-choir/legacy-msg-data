@@ -32,5 +32,5 @@ pub fn legacy_length(msg: &str) -> usize {
 }
 
 fn shiftr8(x: u16) -> u8 {
-    (x >> 8) as u8
+    x as u8
 }

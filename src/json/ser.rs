@@ -17,7 +17,6 @@ pub struct JsonSerializer<W> {
     writer: W,
     compact: bool, // if true omits whitespace, else produces the signing format
     indent: usize,
-    first_elem: bool, // state for collection serialization
 }
 
 impl<W> JsonSerializer<W>
@@ -29,7 +28,7 @@ impl<W> JsonSerializer<W>
     /// set `compact` to `false`.
     #[inline]
     pub fn new(writer: W, compact: bool) -> Self {
-        JsonSerializer { writer, compact, indent: 0, first_elem: true }
+        JsonSerializer { writer, compact, indent: 0 }
     }
 
     /// Unwrap the `Writer` from the `Serializer`.
@@ -82,8 +81,8 @@ impl<'a, W> Serializer for &'a mut JsonSerializer<W>
 {
     type Ok = ();
     type Error = io::Error;
-    type SerializeArray = Self;
-    type SerializeObject = Self;
+    type SerializeArray = CollectionSerializer<'a, W>;
+    type SerializeObject = CollectionSerializer<'a, W>;
 
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
         let s = if v {
@@ -116,7 +115,7 @@ impl<'a, W> Serializer for &'a mut JsonSerializer<W>
                 0x08 => self.writer.write_all(br"\b")?,
                 0x09 => self.writer.write_all(br"\t")?,
                 0x0A => self.writer.write_all(br"\n")?,
-                0x0B => self.writer.write_all(br"\u000B")?,
+                0x0B => self.writer.write_all(br"\u000b")?,
                 0x0C => self.writer.write_all(br"\f")?,
                 0x0D => self.writer.write_all(br"\r")?,
                 0x0E => self.writer.write_all(br"\u000e")?,
@@ -150,113 +149,113 @@ impl<'a, W> Serializer for &'a mut JsonSerializer<W>
         self.writer.write_all(b"null")
     }
 
-    fn serialize_array(self, _len: usize) -> Result<Self::SerializeArray, Self::Error> {
+    fn serialize_array(self, len: usize) -> Result<Self::SerializeArray, Self::Error> {
         self.writer.write_all(b"[")?;
-
-        if !self.compact {
-            self.writer.write_all(b"\n")?;
-            self.indent += 1;
-            self.write_indent()?;
-        }
-
-        self.first_elem = true;
-
-        Ok(self)
+        self.indent += 1;
+        Ok(CollectionSerializer::new(&mut *self, len == 0))
     }
 
-    fn serialize_object(self, _len: usize) -> Result<Self::SerializeObject, Self::Error> {
+    fn serialize_object(self, len: usize) -> Result<Self::SerializeObject, Self::Error> {
         self.writer.write_all(b"{")?;
-
-        if !self.compact {
-            self.writer.write_all(b"\n")?;
-            self.indent += 1;
-            self.write_indent()?;
-        }
-
-        self.first_elem = true;
-
-        Ok(self)
+        self.indent += 1;
+        Ok(CollectionSerializer::new(&mut *self, len == 0))
     }
 }
 
-impl<'a, W> SerializeArray for &'a mut JsonSerializer<W>
+#[doc(hidden)]
+pub struct CollectionSerializer<'a, W> {
+    ser: &'a mut JsonSerializer<W>,
+    first: bool,
+    empty: bool,
+}
+
+impl<'a, W: io::Write> CollectionSerializer<'a, W> {
+    fn new(ser: &'a mut JsonSerializer<W>, empty: bool) -> CollectionSerializer<'a, W> {
+        CollectionSerializer {
+            ser,
+            first: true,
+            empty
+        }
+    }
+}
+
+impl<'a, W> SerializeArray for CollectionSerializer<'a, W>
 where W: io::Write
 {
     type Ok = ();
     type Error = io::Error;
 
     fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error> where T: Serialize {
-        if !self.compact {
-            self.write_indent()?;
-        }
-
-        if self.first_elem {
-            self.first_elem = false;
+        if self.first {
+            self.first = false;
         } else {
-            self.writer.write_all(b",")?;
+            self.ser.writer.write_all(b",")?;
         }
 
-        value.serialize(&mut **self)?;
-
-        if !self.compact {
-            self.writer.write_all(b"\n")?;
+        if !self.ser.compact {
+            self.ser.writer.write_all(b"\n")?;
+            self.ser.write_indent()?;
         }
+
+        value.serialize(&mut *self.ser)?;
 
         Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        if !self.compact {
-            self.indent -= 1;
-            self.write_indent()?;
+        if !self.ser.compact {
+            self.ser.indent -= 1;
+            if !self.empty {
+                self.ser.writer.write_all(b"\n")?;
+                self.ser.write_indent()?;
+            }
         }
 
-        self.writer.write_all(b"]")
+        self.ser.writer.write_all(b"]")
     }
 }
 
-impl<'a, W> SerializeObject for &'a mut JsonSerializer<W>
+impl<'a, W> SerializeObject for CollectionSerializer<'a, W>
 where W: io::Write
 {
     type Ok = ();
     type Error = io::Error;
 
     fn serialize_key(&mut self, value: &str) -> Result<(), Self::Error> {
-        if !self.compact {
-            self.write_indent()?;
+        if self.first {
+            self.first = false;
+        } else {
+            self.ser.writer.write_all(b",")?;
         }
 
-        if self.first_elem {
-            self.first_elem = false;
-        } else {
-            self.writer.write_all(b",")?;
+        if !self.ser.compact {
+            self.ser.writer.write_all(b"\n")?;
+            self.ser.write_indent()?;
         }
 
-        self.serialize_str(value)?;
+        self.ser.serialize_str(value)?;
 
-        if self.compact {
-            self.writer.write_all(b":")
+        if self.ser.compact {
+            self.ser.writer.write_all(b":")
         } else {
-            self.writer.write_all(b": ")
+            self.ser.writer.write_all(b": ")
         }
     }
 
     fn serialize_value<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error> where T: Serialize {
-        value.serialize(&mut **self)?;
-
-        if !self.compact {
-            self.writer.write_all(b"\n")?;
-        }
-
+        value.serialize(&mut *self.ser)?;
         Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        if !self.compact {
-            self.indent -= 1;
-            self.write_indent()?;
+        if !self.ser.compact {
+            self.ser.indent -= 1;
+            if !self.empty {
+                self.ser.writer.write_all(b"\n")?;
+                self.ser.write_indent()?;
+            }
         }
 
-        self.writer.write_all(b"}")
+        self.ser.writer.write_all(b"}")
     }
 }

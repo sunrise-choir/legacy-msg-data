@@ -31,7 +31,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// A structure that deserializes json encoded legacy message values.
 pub struct Deserializer<'de> {
     input: &'de [u8],
-    first: bool, // state for deserializing collections
 }
 
 impl<'de> Deserializer<'de> {
@@ -71,8 +70,7 @@ fn is_digit(byte: u8) -> bool {
 impl<'de> Deserializer<'de> {
     pub fn from_slice(input: &'de [u8]) -> Self {
         Deserializer {
-            input,
-            first: false,
+            input
         }
     }
 
@@ -452,8 +450,7 @@ impl<'de, 'a> abstract_::Deserializer<'de> for &'a mut Deserializer<'de> {
         where V: Visitor<'de>
     {
         self.expect_err(0x5B, Error::ExpectedArray)?;
-        self.first = true;
-        let value = visitor.visit_array(&mut self)?;
+        let value = visitor.visit_array(CollectionAccessor::new(&mut self))?;
         self.expect_ws_err(0x5D, Error::Syntax)?;
         Ok(value)
     }
@@ -462,21 +459,34 @@ impl<'de, 'a> abstract_::Deserializer<'de> for &'a mut Deserializer<'de> {
         where V: Visitor<'de>
     {
         self.expect_err(0x7B, Error::ExpectedObject)?;
-        self.first = true;
-        let value = visitor.visit_object(&mut self)?;
+        let value = visitor.visit_object(CollectionAccessor::new(&mut self))?;
         self.expect_ws_err(0x7D, Error::Syntax)?;
         Ok(value)
     }
 }
 
-impl<'de, 'a> abstract_::deserializer::ArrayAccess<'de> for &'a mut Deserializer<'de> {
+struct CollectionAccessor<'de, 'a> {
+    des: &'a mut Deserializer<'de>,
+    first: bool,
+}
+
+impl<'de, 'a> CollectionAccessor<'de, 'a> {
+    fn new(des: &'a mut Deserializer<'de>) -> CollectionAccessor<'de, 'a> {
+        CollectionAccessor {
+            des,
+            first: true,
+        }
+    }
+}
+
+impl<'de, 'a> abstract_::deserializer::ArrayAccess<'de> for CollectionAccessor<'de, 'a> {
     type Error = Error;
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
         where T: DeserializeSeed<'de>
     {
         // Array ends at `]`
-        if let 0x5D = self.peek_ws()? {
+        if let 0x5D = self.des.peek_ws()? {
             return Ok(None);
         }
 
@@ -484,23 +494,23 @@ impl<'de, 'a> abstract_::deserializer::ArrayAccess<'de> for &'a mut Deserializer
         if self.first {
             self.first = false;
         } else {
-            self.expect_ws_err(0x2C, Error::Syntax)?;
+            self.des.expect_ws_err(0x2C, Error::Syntax)?;
         }
 
-        self.consume_until(is_ws)?;
+        self.des.consume_until(is_ws)?;
 
-        seed.deserialize(&mut **self).map(Some)
+        seed.deserialize(&mut *self.des).map(Some)
     }
 }
 
-impl<'de, 'a> abstract_::deserializer::ObjectAccess<'de> for &'a mut Deserializer<'de> {
+impl<'de, 'a> abstract_::deserializer::ObjectAccess<'de> for CollectionAccessor<'de, 'a> {
     type Error = Error;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<String>>
         where K: abstract_::deserializer::ObjectAccessState
     {
         // Object ends at `}`
-        if let 0x7D = self.peek_ws()? {
+        if let 0x7D = self.des.peek_ws()? {
             return Ok(None);
         }
 
@@ -508,12 +518,12 @@ impl<'de, 'a> abstract_::deserializer::ObjectAccess<'de> for &'a mut Deserialize
         if self.first {
             self.first = false;
         } else {
-            self.expect_ws_err(0x2C, Error::Syntax)?;
+            self.des.expect_ws_err(0x2C, Error::Syntax)?;
         }
 
-        self.consume_until(is_ws)?;
+        self.des.consume_until(is_ws)?;
 
-        let key = self.parse_string()?;
+        let key = self.des.parse_string()?;
 
         if seed.has_key(&key) {
             Err(Error::DuplicateKey)
@@ -526,10 +536,10 @@ impl<'de, 'a> abstract_::deserializer::ObjectAccess<'de> for &'a mut Deserialize
         where V: DeserializeSeed<'de>
     {
         // `:`
-        self.expect_ws_err(0x3A, Error::Syntax)?;
+        self.des.expect_ws_err(0x3A, Error::Syntax)?;
 
-        self.consume_until(is_ws)?;
-        seed.deserialize(&mut **self)
+        self.des.consume_until(is_ws)?;
+        seed.deserialize(&mut *self.des)
     }
 
     /// Can't correctly decode ssb messages without using state for detecting duplicat keys.
@@ -563,7 +573,8 @@ mod tests {
 
     #[test]
     fn regression() {
-        check(b"888e-39919999992999999999999999999999999999999999993");
+        // check(br##"[[][[[][][]][]]]"##);
+        // check(b"888e-39919999992999999999999999999999999999999999993");
         // check(br##"11111111111111111111111111111111111111111111111111111111111111111111111111e-323"##);
         // check(br##"8391.8999999999999999999928e-328e-8"##);
         // check(br##"839999999999999999999928e-338e-9"##);
