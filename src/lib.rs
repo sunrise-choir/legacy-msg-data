@@ -5,6 +5,7 @@ extern crate encode_unicode;
 
 pub mod abstract_;
 pub mod json;
+pub mod cbor;
 
 
 /// An iterator that yields the bytes needed to compute the hash of a message.
