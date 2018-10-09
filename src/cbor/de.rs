@@ -136,15 +136,14 @@ impl<'de> Deserializer<'de> {
     fn parse_number(&mut self) -> Result<LegacyF64> {
         match self.next()? {
             0b111_11011 => {
-                let mut raw_bits_big_endian: u64 = 0;
+                let mut raw_bits: u64 = 0;
                 for _ in 0..8 {
-                    raw_bits_big_endian <<= 8;
+                    raw_bits <<= 8;
                     let byte = self.next()?;
-                    raw_bits_big_endian |= byte as u64;
+                    raw_bits |= byte as u64;
                 }
 
-                let raw_bits_host_endian = u64::from_be(raw_bits_big_endian);
-                let parsed = f64::from_bits(raw_bits_host_endian);
+                let parsed = f64::from_bits(raw_bits);
 
                 match LegacyF64::from_f64(parsed) {
                     Some(f) => Ok(f),
@@ -163,7 +162,10 @@ impl<'de> Deserializer<'de> {
                     return Err(Error::InvalidLength);
                 }
 
-                std::str::from_utf8(&self.input[..len]).map_err(|_| Error::InvalidStringContent)
+                let (s, remaining) = self.input.split_at(len);
+                self.input = remaining;
+
+                std::str::from_utf8(s).map_err(|_| Error::InvalidStringContent)
             }
 
             _ => Err(Error::ExpectedString),
@@ -202,9 +204,18 @@ impl<'de, 'a> abstract_::Deserializer<'de> for &'a mut Deserializer<'de> {
         where V: Visitor<'de>
     {
         match self.peek()? {
-            0b111_10100 => visitor.visit_bool(false),
-            0b111_10101 => visitor.visit_bool(true),
-            0b111_10110 => visitor.visit_null(),
+            0b111_10100 => {
+                let _ = self.next()?;
+                visitor.visit_bool(false)
+            }
+            0b111_10101 => {
+                let _ = self.next()?;
+                visitor.visit_bool(true)
+            }
+            0b111_10110 => {
+                let _ = self.next()?;
+                visitor.visit_null()
+            }
             0b111_11011 => self.deserialize_f64(visitor),
             0b011_00000...0b011_11011 => self.deserialize_str(visitor),
             0b100_00000...0b100_11011 => self.deserialize_array(visitor),
@@ -260,7 +271,7 @@ impl<'de, 'a> abstract_::Deserializer<'de> for &'a mut Deserializer<'de> {
         where V: Visitor<'de>
     {
         let tag = self.next()?;
-        if tag < 0b100_00000 || tag > 0b100_11011 {
+        if tag < 0b101_00000 || tag > 0b101_11011 {
             return Err(Error::ExpectedObject);
         }
 
@@ -349,5 +360,72 @@ impl<'de, 'a> abstract_::deserializer::ObjectAccess<'de> for CollectionAccessor<
 
 #[cfg(test)]
 mod tests {
-    use super::super::{Value, from_slice, to_vec};
+    use super::super::{from_slice, to_vec};
+    use super::super::super::json::Value;
+    use super::super::super::abstract_::LegacyF64;
+
+    use std::collections::HashMap;
+    use std::iter::repeat;
+
+    fn repeat_n<T: Clone>(t: T, n: usize) -> Vec<T> {
+        repeat(t).take(n).collect()
+    }
+
+    #[test]
+    fn fixtures() {
+        // A bunch of these are from https://tools.ietf.org/html/rfc7049#appendix-A
+
+        assert!(from_slice::<Value>(&[0x00]).is_err()); // 0
+        assert!(from_slice::<Value>(&[0x17]).is_err()); // 23
+        assert!(from_slice::<Value>(&[0x18]).is_err()); // not enough input
+        assert!(from_slice::<Value>(&[0x18, 0x18]).is_err()); // 24
+        assert!(from_slice::<Value>(&[0x19, 0x03, 0xe8]).is_err()); // 1000
+        assert!(from_slice::<Value>(&[0x20]).is_err()); // -1
+        assert!(from_slice::<Value>(&[0x38, 0x63]).is_err()); // -100
+        assert!(from_slice::<Value>(&[0xf9, 0x00, 0x00]).is_err()); // 0.0f16
+        assert_eq!(from_slice::<Value>(&[0xf4]).unwrap(), Value::Bool(false));
+        assert_eq!(from_slice::<Value>(&[0xf5]).unwrap(), Value::Bool(true));
+        assert_eq!(from_slice::<Value>(&[0xf6]).unwrap(), Value::Null);
+        assert_eq!(from_slice::<Value>(&[0xfb, 0x3f, 0xf1, 0x99, 0x99, 0x99, 0x99, 0x99, 0x9a])
+                       .unwrap(),
+                   Value::Float(LegacyF64::from_f64(1.1).unwrap()));
+        assert!(from_slice::<Value>(&[0xf7]).is_err()); // undefined
+        assert!(from_slice::<Value>(&[0xfb, 0x7f, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+                    .is_err()); // Infinity
+        assert!(from_slice::<Value>(&[0xfb, 0x7f, 0xf8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+                    .is_err()); // NaN
+        assert!(from_slice::<Value>(&[0xfb, 0xff, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+                    .is_err()); // -Infinity
+        assert!(from_slice::<Value>(&[0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+                    .is_err()); // -0.0
+        assert!(from_slice::<Value>(&[0xf0]).is_err()); // simple(16)
+        assert!(from_slice::<Value>(&[0x40]).is_err()); // h''
+        assert_eq!(from_slice::<Value>(&[0x60]).unwrap(),
+                   Value::String("".to_string()));
+        assert_eq!(from_slice::<Value>(&[0x61, 0x61]).unwrap(),
+                   Value::String("a".to_string()));
+        assert_eq!(from_slice::<Value>(&[0x80]).unwrap(), Value::Array(vec![]));
+        assert_eq!(from_slice::<Value>(&[0x83, 0xf6, 0xf6, 0xf6]).unwrap(),
+                   Value::Array(vec![Value::Null, Value::Null, Value::Null]));
+        assert_eq!(from_slice::<Value>(&[0x98, 0x19, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6,
+                                         0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6,
+                                         0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6])
+                           .unwrap(),
+                   Value::Array(repeat_n(Value::Null, 25)));
+        assert_eq!(from_slice::<Value>(&[0xa0]).unwrap(),
+                   Value::Object(HashMap::new()));
+        assert!(from_slice::<Value>(&[0xa1, 0xf6, 0xf6]).is_err()); // {null: null}
+        assert!(from_slice::<Value>(&[0xa2, 0xf6, 0xf6, 0xf6, 0xf6]).is_err()); // {null: null, null: null}
+
+        let mut foo = HashMap::new();
+        foo.insert("a".to_string(), Value::Null);
+        foo.insert("b".to_string(),
+                   Value::Array(vec![Value::Null, Value::Null]));
+        assert_eq!(from_slice::<Value>(&[0xa2, 0x61, 0x61, 0xf6, 0x61, 0x62, 0x82, 0xf6, 0xf6])
+                       .unwrap(),
+                   Value::Object(foo));
+
+        assert!(from_slice::<Value>(&[0xa2, 0x61, 0x61, 0xf6, 0x61, 0x61, 0x82, 0xf6, 0xf6])
+                    .is_err()); // {"a": null, "a": [null, null]}
+    }
 }
