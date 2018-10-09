@@ -8,4 +8,5 @@ indexmap = "1.0.1"
 ryu-ecmascript = "0.1.0"
 # strtod = "0.0.2"
 strtod = { git = "https://github.com/ssbrs/strtod" }
-encode_unicode = "0.3.2"
+# encode_unicode = "0.3.2"
+encode_unicode = { git = "https://github.com/ssbrs/encode_unicode" }

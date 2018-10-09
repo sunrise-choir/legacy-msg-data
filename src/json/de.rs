@@ -69,9 +69,7 @@ fn is_digit(byte: u8) -> bool {
 
 impl<'de> Deserializer<'de> {
     pub fn from_slice(input: &'de [u8]) -> Self {
-        Deserializer {
-            input
-        }
+        Deserializer { input }
     }
 
     // Returns the next byte without consuming it.
@@ -472,10 +470,7 @@ struct CollectionAccessor<'de, 'a> {
 
 impl<'de, 'a> CollectionAccessor<'de, 'a> {
     fn new(des: &'a mut Deserializer<'de>) -> CollectionAccessor<'de, 'a> {
-        CollectionAccessor {
-            des,
-            first: true,
-        }
+        CollectionAccessor { des, first: true }
     }
 }
 
@@ -564,6 +559,7 @@ mod tests {
 
     fn check(input: &[u8]) {
         let val = from_slice::<Value>(input).unwrap();
+        println!("{:?}", val);
         let enc = to_vec(&val, true);
         let enc_string = std::str::from_utf8(&enc).unwrap().to_string();
         println!("{}\n{:?}\n{:x?}", enc_string, enc_string, enc);
@@ -573,6 +569,7 @@ mod tests {
 
     #[test]
     fn regression() {
+        // check(&[34, 110, 193, 146, 34][..]);
         // check(br##"[[][[[][][]][]]]"##);
         // check(b"888e-39919999992999999999999999999999999999999999993");
         // check(br##"11111111111111111111111111111111111111111111111111111111111111111111111111e-323"##);

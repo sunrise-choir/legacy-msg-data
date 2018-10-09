@@ -1,4 +1,7 @@
+use std::borrow::Borrow;
 use std::collections::{HashMap, BTreeMap};
+use std::cmp::Ordering;
+use std::fmt;
 
 use indexmap::IndexMap;
 
@@ -138,9 +141,42 @@ pub enum ValueOrdered {
     String(String),
     Array(Vec<ValueOrdered>),
     Object {
-        naturals: BTreeMap<String, ValueOrdered>,
+        naturals: BTreeMap<GraphicolexicalString, ValueOrdered>,
         others: IndexMap<String, ValueOrdered>
     },
+}
+
+/// A wrapper around String, that compares by length first and uses lexicographical order as a
+/// tie-breaker.
+#[derive(PartialEq, Eq, Clone)]
+pub struct GraphicolexicalString(String);
+
+impl PartialOrd for GraphicolexicalString {
+    fn partial_cmp(&self, other: &GraphicolexicalString) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for GraphicolexicalString {
+    fn cmp(&self, other: &GraphicolexicalString) -> Ordering {
+        match self.0.len().cmp(&other.0.len()) {
+            Ordering::Greater => Ordering::Greater,
+            Ordering::Less => Ordering::Less,
+            Ordering::Equal => self.0.cmp(&other.0),
+        }
+    }
+}
+
+impl fmt::Debug for GraphicolexicalString {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        self.0.fmt(f)
+    }
+}
+
+impl Borrow<str> for GraphicolexicalString {
+    fn borrow(&self) -> &str {
+        self.0.borrow()
+    }
 }
 
 impl Serialize for ValueOrdered {
@@ -164,7 +200,7 @@ impl Serialize for ValueOrdered {
             ValueOrdered::Object {ref naturals, ref others } => {
                 let mut s = serializer.serialize_object(naturals.len() + others.len())?;
                 for (key, value) in naturals {
-                    s.serialize_entry(key, value)?;
+                    s.serialize_entry(&key.0, value)?;
                 }
                 for (key, value) in others {
                     s.serialize_entry(key, value)?;
@@ -186,7 +222,7 @@ impl<'de> Deserialize<'de> for ValueOrdered {
 
 struct ValueOrderedVisitor;
 
-impl<'a, V> ObjectAccessState for (&'a BTreeMap<String, V>, &'a IndexMap<String, V>) {
+impl<'a, V> ObjectAccessState for (&'a BTreeMap<GraphicolexicalString, V>, &'a IndexMap<String, V>) {
     fn has_key(self, key: &str) -> bool {
         self.1.contains_key(key) || self.0.contains_key(key)
     }
@@ -228,16 +264,16 @@ impl<'de> Visitor<'de> for ValueOrderedVisitor {
 
     fn visit_object<A>(self, mut object: A) -> Result<Self::Value, A::Error> where A: ObjectAccess<'de> {
         // use the size hint, but put a maximum to the allocation because we can't trust the input
-        let mut naturals = BTreeMap::new();
+        let mut naturals: BTreeMap<GraphicolexicalString, ValueOrdered> = BTreeMap::new();
         let mut others = IndexMap::with_capacity(std::cmp::min(object.size_hint().unwrap_or(0), MAX_ALLOC));
 
 
         while let Some((key, val)) = object.next_entry_seed((&naturals, &others), std::marker::PhantomData)? {
             if key == "0" {
-                let _ = naturals.insert(key, val);
+                let _ = naturals.insert(GraphicolexicalString(key), val);
             } else {
                 if is_nat_str(&key) {
-                    let _ = naturals.insert(key, val);
+                    let _ = naturals.insert(GraphicolexicalString(key), val);
                 } else {
                     let _ = others.insert(key, val);
                 }
