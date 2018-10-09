@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 
 use indexmap::IndexMap;
 
@@ -136,8 +136,11 @@ pub enum ValueOrdered {
     Bool(bool),
     Float(LegacyF64),
     String(String),
-    Array(Vec<Value>),
-    Object(IndexMap<String, Value>),
+    Array(Vec<ValueOrdered>),
+    Object {
+        naturals: BTreeMap<String, ValueOrdered>,
+        others: IndexMap<String, ValueOrdered>
+    },
 }
 
 impl Serialize for ValueOrdered {
@@ -158,9 +161,12 @@ impl Serialize for ValueOrdered {
                 }
                 s.end()
             },
-            ValueOrdered::Object(ref m) => {
-                let mut s = serializer.serialize_object(m.len())?;
-                for (key, value) in m {
+            ValueOrdered::Object {ref naturals, ref others } => {
+                let mut s = serializer.serialize_object(naturals.len() + others.len())?;
+                for (key, value) in naturals {
+                    s.serialize_entry(key, value)?;
+                }
+                for (key, value) in others {
                     s.serialize_entry(key, value)?;
                 }
                 s.end()
@@ -180,9 +186,9 @@ impl<'de> Deserialize<'de> for ValueOrdered {
 
 struct ValueOrderedVisitor;
 
-impl<'a, V> ObjectAccessState for &'a IndexMap<String, V> {
+impl<'a, V> ObjectAccessState for (&'a BTreeMap<String, V>, &'a IndexMap<String, V>) {
     fn has_key(self, key: &str) -> bool {
-        self.contains_key(key)
+        self.1.contains_key(key) || self.0.contains_key(key)
     }
 }
 
@@ -222,13 +228,37 @@ impl<'de> Visitor<'de> for ValueOrderedVisitor {
 
     fn visit_object<A>(self, mut object: A) -> Result<Self::Value, A::Error> where A: ObjectAccess<'de> {
         // use the size hint, but put a maximum to the allocation because we can't trust the input
-        let mut m = IndexMap::with_capacity(std::cmp::min(object.size_hint().unwrap_or(0), MAX_ALLOC));
+        let mut naturals = BTreeMap::new();
+        let mut others = IndexMap::with_capacity(std::cmp::min(object.size_hint().unwrap_or(0), MAX_ALLOC));
 
 
-        while let Some((key, val)) = object.next_entry_seed(&m, std::marker::PhantomData)? {
-            let _ = m.insert(key, val);
+        while let Some((key, val)) = object.next_entry_seed((&naturals, &others), std::marker::PhantomData)? {
+            if key == "0" {
+                let _ = naturals.insert(key, val);
+            } else {
+                if is_nat_str(&key) {
+                    let _ = naturals.insert(key, val);
+                } else {
+                    let _ = others.insert(key, val);
+                }
+            }
         }
 
-        Ok(ValueOrdered::Object(m))
+        Ok(ValueOrdered::Object { naturals, others })
+    }
+}
+
+fn is_nat_str(s: &str) -> bool {
+    match s.as_bytes().split_first() {
+        Some((0x31...0x39, tail)) => {
+            if tail.iter().all(|byte| *byte >= 0x30 && *byte <= 0x39) {
+                true
+            } else {
+                false
+            }
+        }
+        _ => {
+            false
+        },
     }
 }
