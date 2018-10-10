@@ -1,13 +1,16 @@
 use std::marker::PhantomData;
 
-use super::{Deserialize, DeserializeSeed, LegacyF64};
+use super::{
+    Deserialize,
+    DeserializeSeed,
+    super::LegacyF64
+};
 
-/// This trait defines the deserialization half of the ssb legacy message data model. It is analogous
-/// to [serde::Deserializer](https://docs.serde.rs/serde/trait.Deserializer.html). Some doc comments
-/// have been blatantly stolen from the serde docs.
+/// This trait defines the deserialization half of the ssb legacy message data model. Corresponds
+/// to [serde::Deserializer](https://docs.serde.rs/serde/trait.Deserializer.html).
 ///
-/// Unlike serde, relying on `Deserializer::deserialize_any` is completely fine, all ssb data formats
-/// must be self-describing.
+/// Unlike serde, relying on `Deserializer::deserialize_any` is completely fine, all ssb
+/// legacy data formats must be self-describing.
 pub trait Deserializer<'de>: Sized {
     /// The error type that can be returned if some error occurs during
     /// deserialization.
@@ -127,6 +130,7 @@ pub trait Visitor<'de>: Sized {
 ////////////////////////////////////////////////////////////////////////////////
 
 /// Provides a `Visitor` access to each element of an array in the input.
+/// Corresponds to [serde::de::SeqAccess](https://docs.serde.rs/serde/de/trait.SeqAccess.html).
 ///
 /// This is a trait that a `Deserializer` passes to a `Visitor` implementation,
 /// which deserializes each item in an array.
@@ -187,6 +191,8 @@ impl<'de, 'a, A> ArrayAccess<'de> for &'a mut A
 ////////////////////////////////////////////////////////////////////////////////
 
 /// Trait for the state needed to deserialize objects.
+///
+/// Corresponds to [serde::de::MapAccess](https://docs.serde.rs/serde/de/trait.MapAccess.html).
 pub trait ObjectAccessState {
     /// Check whether this key has already been encountered.
     fn has_key(self, key: &str) -> bool;

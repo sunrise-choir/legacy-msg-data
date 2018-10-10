@@ -1,11 +1,13 @@
+use std::{error, fmt};
+
 use encode_unicode::{Utf8Char, Utf16Char, U16UtfExt};
 use strtod::strtod;
 
-use super::super::abstract_::{self, Visitor, LegacyF64, DeserializeSeed};
+use super::super::{LegacyF64, de};
 
 /// Everything that can go wrong during deserialization.
 #[derive(PartialEq, Eq, Debug, Copy, Clone)]
-pub enum Error {
+pub enum DecodeJsonError {
     /// Needed more data but got EOF instead.
     UnexpectedEndOfInput,
     /// A generic syntax error. Any valid json would have been ok, but alas...
@@ -26,7 +28,15 @@ pub enum Error {
     ExpectedObject,
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+impl fmt::Display for DecodeJsonError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> std::result::Result<(), fmt::Error> {
+        fmt::Debug::fmt(self, f)
+    }
+}
+
+impl error::Error for DecodeJsonError {}
+
+pub type Result<T> = std::result::Result<T, DecodeJsonError>;
 
 /// A structure that deserializes json encoded legacy message values.
 pub struct Deserializer<'de> {
@@ -37,8 +47,8 @@ impl<'de> Deserializer<'de> {
     /// Check whether there are no non-whitespace tokens up until the end of the input.
     pub fn end(&mut self) -> Result<()> {
         match self.peek_ws() {
-            Ok(_) => Err(Error::TrailingCharacters),
-            Err(Error::UnexpectedEndOfInput) => Ok(()),
+            Ok(_) => Err(DecodeJsonError::TrailingCharacters),
+            Err(DecodeJsonError::UnexpectedEndOfInput) => Ok(()),
             Err(e) => Err(e),
         }
     }
@@ -46,10 +56,10 @@ impl<'de> Deserializer<'de> {
 
 /// Try to parse data from the input. Validates that there are no trailing non-whitespace bytes.
 pub fn from_slice<'de, T>(input: &'de [u8]) -> Result<T>
-    where T: abstract_::DeserializeOwned
+    where T: de::DeserializeOwned
 {
     let mut de = Deserializer::from_slice(input);
-    match abstract_::Deserialize::deserialize(&mut de) {
+    match de::Deserialize::deserialize(&mut de) {
         Ok(t) => de.end().map(|_| t),
         Err(e) => Err(e),
     }
@@ -68,6 +78,7 @@ fn is_digit(byte: u8) -> bool {
 }
 
 impl<'de> Deserializer<'de> {
+    /// Creates a `Deserializer` from a `&[u8]`.
     pub fn from_slice(input: &'de [u8]) -> Self {
         Deserializer { input }
     }
@@ -76,7 +87,7 @@ impl<'de> Deserializer<'de> {
     fn peek(&self) -> Result<u8> {
         match self.input.first() {
             Some(byte) => Ok(*byte),
-            None => Err(Error::UnexpectedEndOfInput),
+            None => Err(DecodeJsonError::UnexpectedEndOfInput),
         }
     }
 
@@ -104,7 +115,7 @@ impl<'de> Deserializer<'de> {
                 self.input = tail;
                 Ok(*head)
             }
-            None => Err(Error::UnexpectedEndOfInput),
+            None => Err(DecodeJsonError::UnexpectedEndOfInput),
         }
     }
 
@@ -124,7 +135,7 @@ impl<'de> Deserializer<'de> {
         self.consume_including(not_is_ws)
     }
 
-    fn expect_ws_err(&mut self, exp: u8, err: Error) -> Result<()> {
+    fn expect_ws_err(&mut self, exp: u8, err: DecodeJsonError) -> Result<()> {
         if self.next_ws()? == exp {
             Ok(())
         } else {
@@ -167,7 +178,7 @@ impl<'de> Deserializer<'de> {
     }
 
     // Consumes the expected byt, gives the given error if it is something else
-    fn expect_err(&mut self, expected: u8, err: Error) -> Result<()> {
+    fn expect_err(&mut self, expected: u8, err: DecodeJsonError) -> Result<()> {
         if self.next()? == expected {
             Ok(())
         } else {
@@ -180,7 +191,7 @@ impl<'de> Deserializer<'de> {
         if pred(self.next()?) {
             Ok(())
         } else {
-            Err(Error::Syntax)
+            Err(DecodeJsonError::Syntax)
         }
     }
 
@@ -192,7 +203,7 @@ impl<'de> Deserializer<'de> {
             self.input = &self.input[5..];
             return Ok(false);
         } else {
-            Err(Error::ExpectedBool)
+            Err(DecodeJsonError::ExpectedBool)
         }
     }
 
@@ -203,7 +214,9 @@ impl<'de> Deserializer<'de> {
         match self.peek() {
             Ok(0x2D) => unsafe { self.advance() },
             Ok(_) => {}
-            Err(Error::UnexpectedEndOfInput) => return Err(Error::ExpectedNumber),
+            Err(DecodeJsonError::UnexpectedEndOfInput) => {
+                return Err(DecodeJsonError::ExpectedNumber)
+            }
             Err(e) => return Err(e),
         }
 
@@ -213,7 +226,7 @@ impl<'de> Deserializer<'de> {
             0x30 => {}
             // first digit nonzero, may be followed by more digits until the `.`
             0x31...0x39 => self.advance_while(is_digit),
-            _ => return Err(Error::ExpectedNumber),
+            _ => return Err(DecodeJsonError::ExpectedNumber),
         }
 
         // `.`, followed by many1 digits
@@ -254,15 +267,15 @@ impl<'de> Deserializer<'de> {
             Some(parsed) => {
                 match LegacyF64::from_f64(parsed) {
                     Some(f) => Ok(f),
-                    None => Err(Error::InvalidNumber),
+                    None => Err(DecodeJsonError::InvalidNumber),
                 }
             }
-            None => Err(Error::InvalidNumber),
+            None => Err(DecodeJsonError::InvalidNumber),
         }
     }
 
     fn parse_string(&mut self) -> Result<String> {
-        self.expect_err(0x22, Error::ExpectedString)?;
+        self.expect_err(0x22, DecodeJsonError::ExpectedString)?;
 
         let mut decoded = String::new();
 
@@ -296,7 +309,7 @@ impl<'de> Deserializer<'de> {
                         // unicode escape sequences
                         0x75 => {
                             if self.input.len() < 4 {
-                                return Err(Error::InvalidStringContent);
+                                return Err(DecodeJsonError::InvalidStringContent);
                             }
 
                             match u16::from_str_radix(unsafe {
@@ -311,10 +324,10 @@ impl<'de> Deserializer<'de> {
                                         // the unicode escape was for a leading ssurrogate, which
                                         // must be followed by another unicode escape which is a
                                         // trailing surrogate
-                                        self.expect_err(0x5C, Error::InvalidStringContent)?;
-                                        self.expect_err(0x75, Error::InvalidStringContent)?;
+                                        self.expect_err(0x5C, DecodeJsonError::InvalidStringContent)?;
+                                        self.expect_err(0x75, DecodeJsonError::InvalidStringContent)?;
                                         if self.input.len() < 4 {
-                                            return Err(Error::InvalidStringContent);
+                                            return Err(DecodeJsonError::InvalidStringContent);
                                         }
 
                                         match u16::from_str_radix(unsafe {
@@ -323,34 +336,34 @@ impl<'de> Deserializer<'de> {
                                             Ok(code_point2) => {
                                                 match Utf16Char::from_tuple((code_point, Some(code_point2))) {
                                                     Ok(c) => decoded.push(c.into()),
-                                                    Err(_) => return Err(Error::InvalidStringContent),
+                                                    Err(_) => return Err(DecodeJsonError::InvalidStringContent),
                                                 }
                                             }
-                                            Err(_) => return Err(Error::InvalidStringContent),
+                                            Err(_) => return Err(DecodeJsonError::InvalidStringContent),
                                         }
                                     } else {
                                         match std::char::from_u32(code_point as u32) {
                                             Some(c) => decoded.push(c),
-                                            None => return Err(Error::InvalidStringContent),
+                                            None => return Err(DecodeJsonError::InvalidStringContent),
                                         }
                                     }
                                 }
-                                Err(_) => return Err(Error::InvalidStringContent),
+                                Err(_) => return Err(DecodeJsonError::InvalidStringContent),
                             }
                         }
 
                         // Nothing else may follow an unescaped `\`
-                        _ => return Err(Error::InvalidStringContent),
+                        _ => return Err(DecodeJsonError::InvalidStringContent),
                     }
                 }
 
                 // the control code points must be escaped
-                0x00...0x1F => return Err(Error::InvalidStringContent),
+                0x00...0x1F => return Err(DecodeJsonError::InvalidStringContent),
 
                 // a regular utf8-encoded code point (unless it is malformed)
                 _ => {
                     match Utf8Char::from_slice_start(self.input) {
-                        Err(_) => return Err(Error::InvalidStringContent),
+                        Err(_) => return Err(DecodeJsonError::InvalidStringContent),
                         Ok((_, len)) => unsafe {
                             decoded.push_str(std::str::from_utf8_unchecked(&self.input[..len]));
                             self.advance_by(len as isize);
@@ -366,16 +379,16 @@ impl<'de> Deserializer<'de> {
             self.input = &self.input[4..];
             return Ok(());
         } else {
-            Err(Error::ExpectedNull)
+            Err(DecodeJsonError::ExpectedNull)
         }
     }
 }
 
-impl<'de, 'a> abstract_::Deserializer<'de> for &'a mut Deserializer<'de> {
-    type Error = Error;
+impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
+    type Error = DecodeJsonError;
 
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
-        where V: Visitor<'de>
+        where V: de::Visitor<'de>
     {
         match self.peek_ws()? {
             0x6E => {
@@ -383,7 +396,7 @@ impl<'de, 'a> abstract_::Deserializer<'de> for &'a mut Deserializer<'de> {
                     self.input = &self.input[4..];
                     visitor.visit_null()
                 } else {
-                    Err(Error::Syntax)
+                    Err(DecodeJsonError::Syntax)
                 }
             }
             0x66 => {
@@ -391,7 +404,7 @@ impl<'de, 'a> abstract_::Deserializer<'de> for &'a mut Deserializer<'de> {
                     self.input = &self.input[5..];
                     visitor.visit_bool(false)
                 } else {
-                    Err(Error::Syntax)
+                    Err(DecodeJsonError::Syntax)
                 }
             }
             0x74 => {
@@ -399,31 +412,31 @@ impl<'de, 'a> abstract_::Deserializer<'de> for &'a mut Deserializer<'de> {
                     self.input = &self.input[4..];
                     visitor.visit_bool(true)
                 } else {
-                    Err(Error::Syntax)
+                    Err(DecodeJsonError::Syntax)
                 }
             }
             0x22 => self.deserialize_str(visitor),
             0x5B => self.deserialize_array(visitor),
             0x7B => self.deserialize_object(visitor),
             0x2D | 0x30...0x39 => self.deserialize_f64(visitor),
-            _ => Err(Error::Syntax),
+            _ => Err(DecodeJsonError::Syntax),
         }
     }
 
     fn deserialize_bool<V>(self, visitor: V) -> Result<V::Value>
-        where V: Visitor<'de>
+        where V: de::Visitor<'de>
     {
         visitor.visit_bool(self.parse_bool()?)
     }
 
     fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value>
-        where V: Visitor<'de>
+        where V: de::Visitor<'de>
     {
         visitor.visit_f64(self.parse_number()?)
     }
 
     fn deserialize_str<V>(self, visitor: V) -> Result<V::Value>
-        where V: Visitor<'de>
+        where V: de::Visitor<'de>
     {
         // We can't reference json strings directly since they contain escape sequences.
         // For the conversion, we need to allocate an owned buffer, so always do owned
@@ -432,33 +445,33 @@ impl<'de, 'a> abstract_::Deserializer<'de> for &'a mut Deserializer<'de> {
     }
 
     fn deserialize_string<V>(self, visitor: V) -> Result<V::Value>
-        where V: Visitor<'de>
+        where V: de::Visitor<'de>
     {
         visitor.visit_string(self.parse_string()?)
     }
 
     fn deserialize_null<V>(self, visitor: V) -> Result<V::Value>
-        where V: Visitor<'de>
+        where V: de::Visitor<'de>
     {
         self.parse_null()?;
         visitor.visit_null()
     }
 
     fn deserialize_array<V>(mut self, visitor: V) -> Result<V::Value>
-        where V: Visitor<'de>
+        where V: de::Visitor<'de>
     {
-        self.expect_err(0x5B, Error::ExpectedArray)?;
+        self.expect_err(0x5B, DecodeJsonError::ExpectedArray)?;
         let value = visitor.visit_array(CollectionAccessor::new(&mut self))?;
-        self.expect_ws_err(0x5D, Error::Syntax)?;
+        self.expect_ws_err(0x5D, DecodeJsonError::Syntax)?;
         Ok(value)
     }
 
     fn deserialize_object<V>(mut self, visitor: V) -> Result<V::Value>
-        where V: Visitor<'de>
+        where V: de::Visitor<'de>
     {
-        self.expect_err(0x7B, Error::ExpectedObject)?;
+        self.expect_err(0x7B, DecodeJsonError::ExpectedObject)?;
         let value = visitor.visit_object(CollectionAccessor::new(&mut self))?;
-        self.expect_ws_err(0x7D, Error::Syntax)?;
+        self.expect_ws_err(0x7D, DecodeJsonError::Syntax)?;
         Ok(value)
     }
 }
@@ -474,11 +487,11 @@ impl<'de, 'a> CollectionAccessor<'de, 'a> {
     }
 }
 
-impl<'de, 'a> abstract_::deserializer::ArrayAccess<'de> for CollectionAccessor<'de, 'a> {
-    type Error = Error;
+impl<'de, 'a> de::ArrayAccess<'de> for CollectionAccessor<'de, 'a> {
+    type Error = DecodeJsonError;
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
-        where T: DeserializeSeed<'de>
+        where T: de::DeserializeSeed<'de>
     {
         // Array ends at `]`
         if let 0x5D = self.des.peek_ws()? {
@@ -489,7 +502,7 @@ impl<'de, 'a> abstract_::deserializer::ArrayAccess<'de> for CollectionAccessor<'
         if self.first {
             self.first = false;
         } else {
-            self.des.expect_ws_err(0x2C, Error::Syntax)?;
+            self.des.expect_ws_err(0x2C, DecodeJsonError::Syntax)?;
         }
 
         self.des.consume_until(is_ws)?;
@@ -498,11 +511,11 @@ impl<'de, 'a> abstract_::deserializer::ArrayAccess<'de> for CollectionAccessor<'
     }
 }
 
-impl<'de, 'a> abstract_::deserializer::ObjectAccess<'de> for CollectionAccessor<'de, 'a> {
-    type Error = Error;
+impl<'de, 'a> de::ObjectAccess<'de> for CollectionAccessor<'de, 'a> {
+    type Error = DecodeJsonError;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<String>>
-        where K: abstract_::deserializer::ObjectAccessState
+        where K: de::ObjectAccessState
     {
         // Object ends at `}`
         if let 0x7D = self.des.peek_ws()? {
@@ -513,7 +526,7 @@ impl<'de, 'a> abstract_::deserializer::ObjectAccess<'de> for CollectionAccessor<
         if self.first {
             self.first = false;
         } else {
-            self.des.expect_ws_err(0x2C, Error::Syntax)?;
+            self.des.expect_ws_err(0x2C, DecodeJsonError::Syntax)?;
         }
 
         self.des.consume_until(is_ws)?;
@@ -521,17 +534,17 @@ impl<'de, 'a> abstract_::deserializer::ObjectAccess<'de> for CollectionAccessor<
         let key = self.des.parse_string()?;
 
         if seed.has_key(&key) {
-            Err(Error::DuplicateKey)
+            Err(DecodeJsonError::DuplicateKey)
         } else {
             Ok(Some(key))
         }
     }
 
     fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value>
-        where V: DeserializeSeed<'de>
+        where V: de::DeserializeSeed<'de>
     {
         // `:`
-        self.des.expect_ws_err(0x3A, Error::Syntax)?;
+        self.des.expect_ws_err(0x3A, DecodeJsonError::Syntax)?;
 
         self.des.consume_until(is_ws)?;
         seed.deserialize(&mut *self.des)
@@ -539,41 +552,41 @@ impl<'de, 'a> abstract_::deserializer::ObjectAccess<'de> for CollectionAccessor<
 
     /// Can't correctly decode ssb messages without using state for detecting duplicat keys.
     fn next_key<K>(&mut self) -> Result<Option<String>>
-        where K: abstract_::deserializer::ObjectAccessState
+        where K: de::ObjectAccessState
     {
         panic!()
     }
 
     /// Can't correctly decode ssb messages without using state for detecting duplicat keys.
     fn next_entry<K, V>(&mut self) -> Result<Option<(String, V)>>
-        where K: abstract_::deserializer::ObjectAccessState,
-              V: abstract_::deserialize::Deserialize<'de>
+        where K: de::ObjectAccessState,
+              V: de::Deserialize<'de>
     {
         panic!()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::super::{Value, from_slice, to_vec};
-
-    fn check(input: &[u8]) {
-        let val = from_slice::<Value>(input).unwrap();
-        println!("{:?}", val);
-        let enc = to_vec(&val, true);
-        let enc_string = std::str::from_utf8(&enc).unwrap().to_string();
-        println!("{}\n{:?}\n{:x?}", enc_string, enc_string, enc);
-        let redecoded = from_slice::<Value>(&enc[..]).unwrap();
-        assert_eq!(val, redecoded);
-    }
-
-    #[test]
-    fn regression() {
-        // check(&[34, 110, 193, 146, 34][..]);
-        // check(br##"[[][[[][][]][]]]"##);
-        // check(b"888e-39919999992999999999999999999999999999999999993");
-        // check(br##"11111111111111111111111111111111111111111111111111111111111111111111111111e-323"##);
-        // check(br##"8391.8999999999999999999928e-328e-8"##);
-        // check(br##"839999999999999999999928e-338e-9"##);
-    }
-}
+//
+// #[cfg(test)]
+// mod tests {
+//     use super::super::{Value, from_slice, to_vec};
+//
+//     fn check(input: &[u8]) {
+//         let val = from_slice::<Value>(input).unwrap();
+//         println!("{:?}", val);
+//         let enc = to_vec(&val, true);
+//         let enc_string = std::str::from_utf8(&enc).unwrap().to_string();
+//         println!("{}\n{:?}\n{:x?}", enc_string, enc_string, enc);
+//         let redecoded = from_slice::<Value>(&enc[..]).unwrap();
+//         assert_eq!(val, redecoded);
+//     }
+//
+//     #[test]
+//     fn regression() {
+//         // check(&[34, 110, 193, 146, 34][..]);
+//         // check(br##"[[][[[][][]][]]]"##);
+//         // check(b"888e-39919999992999999999999999999999999999999999993");
+//         // check(br##"11111111111111111111111111111111111111111111111111111111111111111111111111e-323"##);
+//         // check(br##"8391.8999999999999999999928e-328e-8"##);
+//         // check(br##"839999999999999999999928e-338e-9"##);
+//     }
+// }

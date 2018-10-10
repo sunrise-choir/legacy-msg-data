@@ -1,8 +1,10 @@
-use super::{LegacyF64, Serialize};
+use super::{
+    Serialize,
+    super::LegacyF64,
+};
 
 /// This trait defines the serialization half of the ssb legacy message data model. It is analogous
-/// to [serde::Serializer](https://docs.serde.rs/serde/trait.Serializer.html). Some doc comments
-/// have been blatantly stolen from the serde docs.
+/// to [serde::Serializer](https://docs.serde.rs/serde/trait.Serializer.html).
 pub trait Serializer: Sized {
     /// The output type produced by this `Serializer` during successful
     /// serialization. Most serializers that produce text or binary output
@@ -54,7 +56,8 @@ pub trait Serializer: Sized {
     fn serialize_object(self, len: usize) -> Result<Self::SerializeObject, Self::Error>;
 }
 
-/// Returned from `Serializer::serialize_array`.
+/// Returned from `Serializer::serialize_array`. Corresponds to
+/// [serde::ser::SerializeSeq](https://docs.serde.rs/serde/ser/trait.SerializeSeq.html).
 pub trait SerializeArray {
     /// Must match the `Ok` type of our `Serializer`.
     type Ok;
@@ -70,7 +73,8 @@ pub trait SerializeArray {
     fn end(self) -> Result<Self::Ok, Self::Error>;
 }
 
-/// Returned from `Serializer::serialize_object`.
+/// Returned from `Serializer::serialize_object`. Corresponds to
+/// [serde::ser::SerializeMap](https://docs.serde.rs/serde/ser/trait.SerializeMap.html).
 pub trait SerializeObject {
     /// Must match the `Ok` type of our `Serializer`.
     type Ok;

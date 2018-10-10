@@ -2,9 +2,9 @@ use std::io;
 
 use ryu_ecmascript;
 
-use super::super::abstract_::{
-    serialize::Serialize,
-    serializer::{
+use super::super::{
+    ser::{
+        Serialize,
         Serializer,
         SerializeArray,
         SerializeObject

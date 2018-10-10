@@ -1,8 +1,8 @@
 use std::io;
 
-use super::super::abstract_::{
-    serialize::Serialize,
-    serializer::{
+use super::super::{
+    ser::{
+        Serialize,
         Serializer,
         SerializeArray,
         SerializeObject

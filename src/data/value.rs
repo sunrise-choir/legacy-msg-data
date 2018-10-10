@@ -1,3 +1,5 @@
+// Data structures for manipulating arbitrary legacy data.
+
 use std::borrow::Borrow;
 use std::collections::{HashMap, BTreeMap};
 use std::cmp::Ordering;
@@ -5,16 +7,16 @@ use std::fmt;
 
 use indexmap::IndexMap;
 
-use super::super::abstract_::{
+use super::{
     LegacyF64,
-    serialize::Serialize,
-    serializer::{
+    ser::{
+        Serialize,
         Serializer,
         SerializeArray,
         SerializeObject,
     },
-    deserialize::Deserialize,
-    deserializer::{
+    de::{
+        Deserialize,
         Deserializer,
         Visitor,
         ArrayAccess,
@@ -27,14 +29,20 @@ use super::super::abstract_::{
 // claims to contain a much larger collection, only this much memory will be blindly allocated.
 static MAX_ALLOC: usize = 2048;
 
-/// Represents any valid ssb legacy message value, analogous to [serde_json::Value](https://docs.serde.rs/serde_json/value/enum.Value.html).
+/// Represents any valid ssb legacy message [value](TODO), analogous to [serde_json::Value](https://docs.serde.rs/serde_json/value/enum.Value.html).
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Value {
+    /// The [null](TODO) value.
     Null,
+    /// A [boolean](TODO).
     Bool(bool),
+    /// A [float](TODO).
     Float(LegacyF64),
+    /// A [utf8 string](TODO).
     String(String),
+    /// An [array](TODO).
     Array(Vec<Value>),
+    /// An [object](TODO).
     Object(HashMap<String, Value>),
 }
 
@@ -135,20 +143,28 @@ impl<'de> Visitor<'de> for ValueVisitor {
 /// using `Value` instead of this, this should only be used for checking message signatures.
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum ValueOrdered {
+    /// The [null](TODO) value.
     Null,
+    /// A [boolean](TODO).
     Bool(bool),
+    /// A [float](TODO).
     Float(LegacyF64),
+    /// A [utf8 string](TODO).
     String(String),
+    /// An [array](TODO).
     Array(Vec<ValueOrdered>),
+    /// An order-preserving [object](TODO).
     Object {
+        /// Keys that parse as [natural numbers](TODO), sorted numerically.
         naturals: BTreeMap<GraphicolexicalString, ValueOrdered>,
+        /// The remaining keys, sorted in insertion order.
         others: IndexMap<String, ValueOrdered>
     },
 }
 
 /// A wrapper around String, that compares by length first and uses lexicographical order as a
 /// tie-breaker.
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Hash)]
 pub struct GraphicolexicalString(String);
 
 impl PartialOrd for GraphicolexicalString {
@@ -176,6 +192,18 @@ impl fmt::Debug for GraphicolexicalString {
 impl Borrow<str> for GraphicolexicalString {
     fn borrow(&self) -> &str {
         self.0.borrow()
+    }
+}
+
+impl From<String> for GraphicolexicalString {
+    fn from(s: String) -> Self {
+        GraphicolexicalString(s)
+    }
+}
+
+impl From<GraphicolexicalString> for String {
+    fn from(s: GraphicolexicalString) -> Self {
+        s.0
     }
 }
 

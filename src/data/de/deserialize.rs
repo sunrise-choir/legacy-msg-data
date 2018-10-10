@@ -3,7 +3,8 @@ use std::marker::PhantomData;
 use super::Deserializer;
 
 /// A **data structure** that can be deserialized from any ssb legacy message
-/// data format.
+/// data format, corresponds to
+/// [serde::Deserialize](https://docs.serde.rs/serde/de/trait.Deserialize.html).
 pub trait Deserialize<'de>: Sized {
     /// Deserialize this value from the given deserializer.
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de>;
@@ -32,7 +33,8 @@ pub trait Deserialize<'de>: Sized {
 }
 
 /// A data structure that can be deserialized without borrowing any data from
-/// the deserializer.
+/// the deserializer, corresponds to
+/// [serde::de::DeserializeOwned](https://docs.serde.rs/serde/de/trait.DeserializeOwned.html).
 ///
 /// This is primarily useful for trait bounds on functions. For example a
 /// `from_str` function may be able to deserialize a data structure that borrows
@@ -43,7 +45,8 @@ impl<T> DeserializeOwned for T where T: for<'de> Deserialize<'de> {}
 
 /// `DeserializeSeed` is the stateful form of the `Deserialize` trait. If you
 /// ever find yourself looking for a way to pass data into a `Deserialize` impl,
-/// this trait is the way to do it.
+/// this trait is the way to do it. Corresponds to
+/// [serde::de::DeserializeSeed](https://docs.serde.rs/serde/de/trait.DeserializeSeed.html).
 pub trait DeserializeSeed<'de>: Sized {
     /// The type produced by using this seed.
     type Value;

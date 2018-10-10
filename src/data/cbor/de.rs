@@ -1,8 +1,16 @@
-use super::super::abstract_::{self, Visitor, LegacyF64, DeserializeSeed};
+use std::{error, fmt};
+
+use super::super::{
+    LegacyF64,
+    de::{
+        self,
+        Visitor,
+    }
+};
 
 /// Everything that can go wrong during deserialization.
 #[derive(PartialEq, Eq, Debug, Copy, Clone)]
-pub enum Error {
+pub enum DecodeCborError {
     /// Needed more data but got EOF instead.
     UnexpectedEndOfInput,
     /// Encountered a major or additional type that is disallowed.
@@ -25,7 +33,15 @@ pub enum Error {
     ExpectedObject,
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+impl fmt::Display for DecodeCborError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> std::result::Result<(), fmt::Error> {
+        fmt::Debug::fmt(self, f)
+    }
+}
+
+impl error::Error for DecodeCborError {}
+
+pub type Result<T> = std::result::Result<T, DecodeCborError>;
 
 /// A structure that deserializes cbor encoded legacy message values.
 pub struct Deserializer<'de> {
@@ -38,23 +54,24 @@ impl<'de> Deserializer<'de> {
         if self.input.len() == 0 {
             Ok(())
         } else {
-            Err(Error::TrailingBytes)
+            Err(DecodeCborError::TrailingBytes)
         }
     }
 }
 
 /// Try to parse data from the input. Validates that there are no trailing bytes.
 pub fn from_slice<'de, T>(input: &'de [u8]) -> Result<T>
-    where T: abstract_::DeserializeOwned
+    where T: de::DeserializeOwned
 {
     let mut de = Deserializer::from_slice(input);
-    match abstract_::Deserialize::deserialize(&mut de) {
+    match de::Deserialize::deserialize(&mut de) {
         Ok(t) => de.end().map(|_| t),
         Err(e) => Err(e),
     }
 }
 
 impl<'de> Deserializer<'de> {
+    /// Creates a `Deserializer` from a `&[u8]`.
     pub fn from_slice(input: &'de [u8]) -> Self {
         Deserializer { input }
     }
@@ -63,7 +80,7 @@ impl<'de> Deserializer<'de> {
     fn peek(&self) -> Result<u8> {
         match self.input.first() {
             Some(byte) => Ok(*byte),
-            None => Err(Error::UnexpectedEndOfInput),
+            None => Err(DecodeCborError::UnexpectedEndOfInput),
         }
     }
 
@@ -74,7 +91,7 @@ impl<'de> Deserializer<'de> {
                 self.input = tail;
                 Ok(*head)
             }
-            None => Err(Error::UnexpectedEndOfInput),
+            None => Err(DecodeCborError::UnexpectedEndOfInput),
         }
     }
 
@@ -129,7 +146,7 @@ impl<'de> Deserializer<'de> {
         match self.next()? {
             0b111_10100 => Ok(false),
             0b111_10101 => Ok(true),
-            _ => Err(Error::ExpectedBool),
+            _ => Err(DecodeCborError::ExpectedBool),
         }
     }
 
@@ -147,10 +164,10 @@ impl<'de> Deserializer<'de> {
 
                 match LegacyF64::from_f64(parsed) {
                     Some(f) => Ok(f),
-                    None => Err(Error::InvalidNumber),
+                    None => Err(DecodeCborError::InvalidNumber),
                 }
             }
-            _ => Err(Error::ExpectedNumber),
+            _ => Err(DecodeCborError::ExpectedNumber),
         }
     }
 
@@ -159,16 +176,16 @@ impl<'de> Deserializer<'de> {
             tag @ 0b011_00000...0b011_11011 => {
                 let len = self.decode_len(tag)?;
                 if self.input.len() < len {
-                    return Err(Error::InvalidLength);
+                    return Err(DecodeCborError::InvalidLength);
                 }
 
                 let (s, remaining) = self.input.split_at(len);
                 self.input = remaining;
 
-                std::str::from_utf8(s).map_err(|_| Error::InvalidStringContent)
+                std::str::from_utf8(s).map_err(|_| DecodeCborError::InvalidStringContent)
             }
 
-            _ => Err(Error::ExpectedString),
+            _ => Err(DecodeCborError::ExpectedString),
         }
     }
 
@@ -177,28 +194,28 @@ impl<'de> Deserializer<'de> {
             tag @ 0b011_00000...0b011_11011 => {
                 let len = self.decode_len(tag)?;
                 if self.input.len() < len {
-                    return Err(Error::InvalidLength);
+                    return Err(DecodeCborError::InvalidLength);
                 }
 
                 let mut data = Vec::with_capacity(len);
                 data.extend_from_slice(&self.input[..len]);
-                String::from_utf8(data).map_err(|_| Error::InvalidStringContent)
+                String::from_utf8(data).map_err(|_| DecodeCborError::InvalidStringContent)
             }
 
-            _ => Err(Error::ExpectedString),
+            _ => Err(DecodeCborError::ExpectedString),
         }
     }
 
     fn parse_null(&mut self) -> Result<()> {
         match self.next()? {
             0b111_10110 => Ok(()),
-            _ => Err(Error::ExpectedNull),
+            _ => Err(DecodeCborError::ExpectedNull),
         }
     }
 }
 
-impl<'de, 'a> abstract_::Deserializer<'de> for &'a mut Deserializer<'de> {
-    type Error = Error;
+impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
+    type Error = DecodeCborError;
 
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
         where V: Visitor<'de>
@@ -220,7 +237,7 @@ impl<'de, 'a> abstract_::Deserializer<'de> for &'a mut Deserializer<'de> {
             0b011_00000...0b011_11011 => self.deserialize_str(visitor),
             0b100_00000...0b100_11011 => self.deserialize_array(visitor),
             0b101_00000...0b101_11011 => self.deserialize_object(visitor),
-            _ => Err(Error::ForbiddenType),
+            _ => Err(DecodeCborError::ForbiddenType),
         }
     }
 
@@ -260,7 +277,7 @@ impl<'de, 'a> abstract_::Deserializer<'de> for &'a mut Deserializer<'de> {
     {
         let tag = self.next()?;
         if tag < 0b100_00000 || tag > 0b100_11011 {
-            return Err(Error::ExpectedArray);
+            return Err(DecodeCborError::ExpectedArray);
         }
 
         let len = self.decode_len(tag)?;
@@ -272,7 +289,7 @@ impl<'de, 'a> abstract_::Deserializer<'de> for &'a mut Deserializer<'de> {
     {
         let tag = self.next()?;
         if tag < 0b101_00000 || tag > 0b101_11011 {
-            return Err(Error::ExpectedObject);
+            return Err(DecodeCborError::ExpectedObject);
         }
 
         let len = self.decode_len(tag)?;
@@ -291,11 +308,11 @@ impl<'de, 'a> CollectionAccessor<'de, 'a> {
     }
 }
 
-impl<'de, 'a> abstract_::deserializer::ArrayAccess<'de> for CollectionAccessor<'de, 'a> {
-    type Error = Error;
+impl<'de, 'a> de::ArrayAccess<'de> for CollectionAccessor<'de, 'a> {
+    type Error = DecodeCborError;
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
-        where T: DeserializeSeed<'de>
+        where T: de::DeserializeSeed<'de>
     {
         if self.len == 0 {
             return Ok(None);
@@ -311,11 +328,11 @@ impl<'de, 'a> abstract_::deserializer::ArrayAccess<'de> for CollectionAccessor<'
 }
 
 // TODO figure out how to do a version of this trait that allows borrowing keys
-impl<'de, 'a> abstract_::deserializer::ObjectAccess<'de> for CollectionAccessor<'de, 'a> {
-    type Error = Error;
+impl<'de, 'a> de::ObjectAccess<'de> for CollectionAccessor<'de, 'a> {
+    type Error = DecodeCborError;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<String>>
-        where K: abstract_::deserializer::ObjectAccessState
+        where K: de::ObjectAccessState
     {
         if self.len == 0 {
             return Ok(None);
@@ -326,29 +343,29 @@ impl<'de, 'a> abstract_::deserializer::ObjectAccess<'de> for CollectionAccessor<
         let key = self.des.parse_str()?;
 
         if seed.has_key(key) {
-            Err(Error::DuplicateKey)
+            Err(DecodeCborError::DuplicateKey)
         } else {
             Ok(Some(key.to_string()))
         }
     }
 
     fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value>
-        where V: DeserializeSeed<'de>
+        where V: de::DeserializeSeed<'de>
     {
         seed.deserialize(&mut *self.des)
     }
 
     /// Can't correctly decode ssb messages without using state for detecting duplicat keys.
     fn next_key<K>(&mut self) -> Result<Option<String>>
-        where K: abstract_::deserializer::ObjectAccessState
+        where K: de::ObjectAccessState
     {
         panic!()
     }
 
     /// Can't correctly decode ssb messages without using state for detecting duplicat keys.
     fn next_entry<K, V>(&mut self) -> Result<Option<(String, V)>>
-        where K: abstract_::deserializer::ObjectAccessState,
-              V: abstract_::deserialize::Deserialize<'de>
+        where K: de::ObjectAccessState,
+              V: de::Deserialize<'de>
     {
         panic!()
     }
@@ -361,8 +378,8 @@ impl<'de, 'a> abstract_::deserializer::ObjectAccess<'de> for CollectionAccessor<
 #[cfg(test)]
 mod tests {
     use super::super::{from_slice, to_vec};
-    use super::super::super::json::Value;
-    use super::super::super::abstract_::LegacyF64;
+    use super::super::super::Value;
+    use super::super::super::LegacyF64;
 
     use std::collections::HashMap;
     use std::iter::repeat;
