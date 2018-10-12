@@ -1,6 +1,10 @@
 use std::marker::PhantomData;
 
-use super::Deserializer;
+use super::{
+    Deserializer,
+    Visitor,
+    super::super::StringlyTypedError,
+};
 
 /// A **data structure** that can be deserialized from any ssb legacy message
 /// data format, corresponds to
@@ -67,5 +71,57 @@ impl<'de, T> DeserializeSeed<'de> for PhantomData<T>
         where D: Deserializer<'de>
     {
         T::deserialize(deserializer)
+    }
+}
+
+/////////////////////////////////////////////////////////////////
+
+struct StringVisitor;
+
+impl<'de> Visitor<'de> for StringVisitor {
+    type Value = String;
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where E: StringlyTypedError
+    {
+        Ok(v.to_owned())
+    }
+
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+        where E: StringlyTypedError
+    {
+        Ok(v)
+    }
+}
+
+impl<'de> Deserialize<'de> for String {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: Deserializer<'de>
+    {
+        deserializer.deserialize_string(StringVisitor)
+    }
+}
+
+//////////////////////////////////////////////////////////////////////
+
+struct StrVisitor;
+
+impl<'a> Visitor<'a> for StrVisitor {
+    type Value = &'a str;
+
+    fn visit_borrowed_str<E>(self, v: &'a str) -> Result<Self::Value, E>
+    where
+        E: StringlyTypedError,
+    {
+        Ok(v)
+    }
+}
+
+impl<'de: 'a, 'a> Deserialize<'de> for &'a str {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(StrVisitor)
     }
 }
