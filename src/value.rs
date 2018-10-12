@@ -23,7 +23,7 @@ use super::{
         ObjectAccess,
         ObjectAccessState,
     },
-    super::StringlyTypedError,
+    StringlyTypedError,
 };
 
 // The maximum capacity of entries to preallocate for arrays and objects. Even if malicious input

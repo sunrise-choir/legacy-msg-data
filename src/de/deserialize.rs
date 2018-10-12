@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use super::{
     Deserializer,
     Visitor,
-    super::super::StringlyTypedError,
+    super::StringlyTypedError,
 };
 
 /// A **data structure** that can be deserialized from any ssb legacy message

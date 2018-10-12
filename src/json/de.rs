@@ -3,7 +3,7 @@ use std::{error, fmt};
 use encode_unicode::{Utf8Char, Utf16Char, U16UtfExt};
 use strtod::strtod;
 
-use super::super::{LegacyF64, de, super::StringlyTypedError};
+use super::super::{LegacyF64, de, StringlyTypedError};
 
 /// Everything that can go wrong during deserialization.
 #[derive(PartialEq, Eq, Debug, Clone)]
@@ -30,7 +30,9 @@ pub enum DecodeJsonError {
 }
 
 impl StringlyTypedError for DecodeJsonError {
-    fn custom<T>(msg: T) -> Self where T: std::fmt::Display {
+    fn custom<T>(msg: T) -> Self
+        where T: std::fmt::Display
+    {
         DecodeJsonError::Other(msg.to_string())
     }
 }

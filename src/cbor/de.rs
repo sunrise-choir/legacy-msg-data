@@ -6,7 +6,7 @@ use super::super::{
         self,
         Visitor,
     },
-    super::StringlyTypedError,
+    StringlyTypedError,
 };
 
 /// Everything that can go wrong during deserialization.

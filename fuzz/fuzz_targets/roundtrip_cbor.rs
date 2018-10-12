@@ -1,10 +1,10 @@
 #![no_main]
 #[macro_use]
 extern crate libfuzzer_sys;
-extern crate ssb_legacy_msg;
+extern crate ssb_legacy_msg_data;
 
-use ssb_legacy_msg::cbor::{from_slice, to_vec};
-use ssb_legacy_msg::json::Value;
+use ssb_legacy_msg_data::cbor::{from_slice, to_vec};
+use ssb_legacy_msg_data::Value;
 
 fuzz_target!(|data: &[u8]| {
     // This comment keeps rustfmt from breaking the fuzz macro...
