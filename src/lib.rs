@@ -15,6 +15,12 @@ extern crate encode_unicode;
 pub mod data;
 pub mod metadata;
 
+/// An error type that supports arbitrary error messages.
+pub trait StringlyTypedError {
+    /// Create an instance of this with an arbitrary message.
+    fn custom<T>(msg: T) -> Self where T: std::fmt::Display;
+}
+
 /// An iterator that yields the [bytes](TODO) needed to compute the hash of a message.
 /// The total number of bytes yielded by this is the length of the message.
 pub struct WeirdEncodingIterator<'a>(std::iter::Map<std::str::EncodeUtf16<'a>, fn(u16) -> u8>);

@@ -5,11 +5,12 @@ use super::super::{
     de::{
         self,
         Visitor,
-    }
+    },
+    super::StringlyTypedError,
 };
 
 /// Everything that can go wrong during deserialization.
-#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum DecodeCborError {
     /// Needed more data but got EOF instead.
     UnexpectedEndOfInput,
@@ -31,6 +32,13 @@ pub enum DecodeCborError {
     ExpectedNull,
     ExpectedArray,
     ExpectedObject,
+    Other(String),
+}
+
+impl StringlyTypedError for DecodeCborError {
+    fn custom<T>(msg: T) -> Self where T: std::fmt::Display {
+        DecodeCborError::Other(msg.to_string())
+    }
 }
 
 impl fmt::Display for DecodeCborError {

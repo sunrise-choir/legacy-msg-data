@@ -3,7 +3,8 @@ use std::marker::PhantomData;
 use super::{
     Deserialize,
     DeserializeSeed,
-    super::LegacyF64
+    super::LegacyF64,
+    super::super::StringlyTypedError,
 };
 
 /// This trait defines the deserialization half of the ssb legacy message data model. Corresponds
@@ -14,7 +15,8 @@ use super::{
 pub trait Deserializer<'de>: Sized {
     /// The error type that can be returned if some error occurs during
     /// deserialization.
-    type Error;
+    // type Error: DynamicError;
+    type Error: StringlyTypedError;
 
     /// Require the `Deserializer` to figure out how to drive the visitor based
     /// on what data type is in the input.

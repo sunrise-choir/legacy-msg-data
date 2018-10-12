@@ -3,10 +3,10 @@ use std::{error, fmt};
 use encode_unicode::{Utf8Char, Utf16Char, U16UtfExt};
 use strtod::strtod;
 
-use super::super::{LegacyF64, de};
+use super::super::{LegacyF64, de, super::StringlyTypedError};
 
 /// Everything that can go wrong during deserialization.
-#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum DecodeJsonError {
     /// Needed more data but got EOF instead.
     UnexpectedEndOfInput,
@@ -26,6 +26,13 @@ pub enum DecodeJsonError {
     ExpectedNull,
     ExpectedArray,
     ExpectedObject,
+    Other(String),
+}
+
+impl StringlyTypedError for DecodeJsonError {
+    fn custom<T>(msg: T) -> Self where T: std::fmt::Display {
+        DecodeJsonError::Other(msg.to_string())
+    }
 }
 
 impl fmt::Display for DecodeJsonError {
@@ -321,7 +328,7 @@ impl<'de> Deserializer<'de> {
                                     }
 
                                     if code_point.is_utf16_leading_surrogate() {
-                                        // the unicode escape was for a leading ssurrogate, which
+                                        // the unicode escape was for a leading surrogate, which
                                         // must be followed by another unicode escape which is a
                                         // trailing surrogate
                                         self.expect_err(0x5C, DecodeJsonError::InvalidStringContent)?;
