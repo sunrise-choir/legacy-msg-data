@@ -60,19 +60,21 @@ pub trait Deserializer<'de>: Sized {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-/// This trait represents a visitor that walks through a deserializer.
-///
-/// Unlike the [serde equivalent](https://docs.serde.rs/serde/de/trait.Visitor.html), there is no
-/// opinionated error handling, the methods thus don't have default implementations returning errors.
+/// This trait represents a visitor that walks through a deserializer. Corresponds
+/// to [serde::de::Visitor](https://docs.serde.rs/serde/de/trait.Visitor.html).
 pub trait Visitor<'de>: Sized {
     /// The value produced by this visitor.
     type Value;
 
     /// The input contains a boolean.
-    fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>;
+    fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E> where E: StringlyTypedError {
+        Err(E::custom(format!("Unexpected bool: {:?}", v)))
+    }
 
     /// The input contains a `LegacyF64`.
-    fn visit_f64<E>(self, v: LegacyF64) -> Result<Self::Value, E>;
+    fn visit_f64<E>(self, v: LegacyF64) -> Result<Self::Value, E> where E: StringlyTypedError {
+        Err(E::custom(format!("Unexpected float: {:?}", v)))
+    }
 
     /// The input contains a string. The lifetime of the string is ephemeral and
     /// it may be destroyed after this method returns.
@@ -85,7 +87,9 @@ pub trait Visitor<'de>: Sized {
     ///
     /// It is never correct to implement `visit_string` without implementing
     /// `visit_str`. Implement neither, both, or just `visit_str`.
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>;
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> where E: StringlyTypedError {
+        Err(E::custom(format!("Unexpected string: {:?}", v)))
+    }
 
     /// The input contains a string that lives at least as long as the
     /// `Deserializer`.
@@ -96,7 +100,7 @@ pub trait Visitor<'de>: Sized {
     /// data outlives `'a`.
     ///
     /// The default implementation forwards to `visit_str`.
-    fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E> {
+    fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E> where E: StringlyTypedError {
         self.visit_str(v)
     }
 
@@ -115,18 +119,26 @@ pub trait Visitor<'de>: Sized {
     ///
     /// The default implementation forwards to `visit_str` and then drops the
     /// `String`.
-    fn visit_string<E>(self, v: String) -> Result<Self::Value, E> {
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E> where E: StringlyTypedError {
         self.visit_str(&v)
     }
 
     /// The input contains a `null`.
-    fn visit_null<E>(self) -> Result<Self::Value, E>;
+    fn visit_null<E>(self) -> Result<Self::Value, E> where E: StringlyTypedError {
+        Err(E::custom(format!("Unexpected null")))
+    }
 
     /// The input contains an array.
-    fn visit_array<A>(self, seq: A) -> Result<Self::Value, A::Error> where A: ArrayAccess<'de>;
+    fn visit_array<A>(self, arr: A) -> Result<Self::Value, A::Error> where A: ArrayAccess<'de> {
+        let _ = arr;
+        Err(A::Error::custom(format!("Unexpected array")))
+    }
 
     /// The input contains an object.
-    fn visit_object<A>(self, object: A) -> Result<Self::Value, A::Error> where A: ObjectAccess<'de>;
+    fn visit_object<A>(self, object: A) -> Result<Self::Value, A::Error> where A: ObjectAccess<'de> {
+        let _ = object;
+        Err(A::Error::custom(format!("Unexpected object")))
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -139,7 +151,7 @@ pub trait Visitor<'de>: Sized {
 pub trait ArrayAccess<'de> {
     /// The error type that can be returned if some error occurs during
     /// deserialization.
-    type Error;
+    type Error: StringlyTypedError;
 
     /// This returns `Ok(Some(value))` for the next value in the sequence, or
     /// `Ok(None)` if there are no more remaining items.
@@ -215,7 +227,7 @@ impl<T> ObjectAccessState for PhantomData<T> {
 pub trait ObjectAccess<'de> {
     /// The error type that can be returned if some error occurs during
     /// deserialization.
-    type Error;
+    type Error: StringlyTypedError;
 
     /// This returns `Ok(Some(key))` for the next key in the map, or `Ok(None)`
     /// if there are no more remaining entries.

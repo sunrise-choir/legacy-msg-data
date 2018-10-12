@@ -22,7 +22,8 @@ use super::{
         ArrayAccess,
         ObjectAccess,
         ObjectAccessState,
-    }
+    },
+    super::StringlyTypedError,
 };
 
 // The maximum capacity of entries to preallocate for arrays and objects. Even if malicious input
@@ -103,7 +104,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
         Ok(Value::Float(v))
     }
 
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> {
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> where E: StringlyTypedError {
         self.visit_string(v.to_string())
     }
 
@@ -267,7 +268,7 @@ impl<'de> Visitor<'de> for ValueOrderedVisitor {
         Ok(ValueOrdered::Float(v))
     }
 
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> {
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> where E: StringlyTypedError {
         self.visit_string(v.to_string())
     }
 
