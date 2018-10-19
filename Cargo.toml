@@ -4,6 +4,8 @@ version = "0.1.0"
 authors = ["AljoschaMeyer <mail@aljoscha-meyer.de>"]
 
 [dependencies]
+serde = "1.0.80"
+base64 = "0.9.3"
 indexmap = "1.0.1"
 ryu-ecmascript = "0.1.0"
 # strtod = "0.0.2"

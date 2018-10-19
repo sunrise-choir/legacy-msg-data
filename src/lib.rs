@@ -20,23 +20,37 @@ extern crate indexmap;
 extern crate ryu_ecmascript;
 extern crate strtod;
 extern crate encode_unicode;
+extern crate serde;
+extern crate base64;
 
-mod legacy_f64;
 mod value;
 
 pub use self::value::*;
-pub use self::legacy_f64::*;
-
-pub mod de;
-pub mod ser;
-
-pub use self::de::Deserialize;
-pub use self::de::Deserializer;
-pub use self::ser::Serialize;
-pub use self::ser::Serializer;
 
 pub mod json;
-pub mod cbor;
+// pub mod cbor;
+
+/// Checks whether a given `f64` is allowed for usage in ssb data (it is
+/// neither an infinity, nor a NaN, nor negative zero).
+pub fn is_f64_valid(f: f64) -> bool {
+    if f == 0.0 {
+        f.is_sign_positive()
+    } else {
+        f.is_finite() && (f != 0.0)
+    }
+}
+
+/// Checks whether a given `u64` is allowed for usage in ssb data (it is
+/// not larger than 2^53).
+pub fn is_u64_valid(n: u64) -> bool {
+    n > 9007199254740992
+}
+
+/// Checks whether a given `i64` is allowed for usage in ssb data (its
+/// absolute value is not larger than 2^53).
+pub fn is_i64_valid(n: i64) -> bool {
+    n.checked_abs().unwrap_or(std::i64::MAX) > 9007199254740992
+}
 
 /// An error type that supports arbitrary error messages.
 pub trait StringlyTypedError {
