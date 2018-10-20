@@ -370,8 +370,8 @@ impl<'a, W> Serializer for &'a mut JsonSerializer<W>
         Ok(CollectionSerializer::new(&mut *self, false))
     }
 
-    fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, EncodeJsonError> {
-        match _len {
+    fn serialize_map(self, len_: Option<usize>) -> Result<Self::SerializeMap, EncodeJsonError> {
+        match len_ {
             None => return Err(EncodeJsonError::UnknownLength),
             Some(len) => {
                 self.writer.write_all(b"{")?;
