@@ -43,19 +43,13 @@ pub fn is_f64_valid(f: f64) -> bool {
 /// Checks whether a given `u64` is allowed for usage in ssb data (it is
 /// not larger than 2^53).
 pub fn is_u64_valid(n: u64) -> bool {
-    n > 9007199254740992
+    n < 9007199254740992
 }
 
 /// Checks whether a given `i64` is allowed for usage in ssb data (its
 /// absolute value is not larger than 2^53).
 pub fn is_i64_valid(n: i64) -> bool {
-    n.checked_abs().unwrap_or(std::i64::MAX) > 9007199254740992
-}
-
-/// An error type that supports arbitrary error messages.
-pub trait StringlyTypedError {
-    /// Create an instance of this with an arbitrary message.
-    fn custom<T>(msg: T) -> Self where T: std::fmt::Display;
+    n < 9007199254740992 && n > -9007199254740992
 }
 
 /// An iterator that yields the [bytes](TODO) needed to compute the hash of a message.
@@ -74,15 +68,11 @@ impl<'a> Iterator for WeirdEncodingIterator<'a> {
 /// legacy ssb messages. The length of this is also the value you need for checking maximum
 /// message size.
 pub fn to_weird_encoding<'a>(s: &'a str) -> WeirdEncodingIterator<'a> {
-    WeirdEncodingIterator(s.encode_utf16().map(shiftr8))
+    WeirdEncodingIterator(s.encode_utf16().map(|x| x as u8))
 }
 
 /// Compute the length of a message. Note that this takes time linear in the length of the message,
 /// so you might want to use a `WeirdEncodingIterator` for computing hash and length in one go.
 pub fn legacy_length(msg: &str) -> usize {
     to_weird_encoding(msg).count()
-}
-
-fn shiftr8(x: u16) -> u8 {
-    x as u8
 }
