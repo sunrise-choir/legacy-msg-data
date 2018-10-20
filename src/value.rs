@@ -1,6 +1,5 @@
 // Data structures for manipulating arbitrary legacy data.
 
-
 use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, btree_map};
@@ -266,7 +265,6 @@ fn is_nat_str(s: &str) -> bool {
         },
     }
 }
-
 
 // A map with string keys that sorts strings that look like natural numbers by numeric
 // value, and preserves insertion order for everything else.

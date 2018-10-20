@@ -23,10 +23,7 @@ extern crate encode_unicode;
 extern crate serde;
 extern crate base64;
 
-mod value;
-
-pub use self::value::Value;
-
+pub mod value;
 pub mod json;
 // pub mod cbor;
 
