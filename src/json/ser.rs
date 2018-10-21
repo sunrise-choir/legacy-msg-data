@@ -63,11 +63,11 @@ impl<W> JsonSerializer<W>
     /// If `compact`, this omits all whitespace. For signing or signature checking,
     /// set `compact` to `false`.
     #[inline]
-    pub fn new(writer: W, compact: bool) -> Self {
+    pub fn new(writer: W, compact: bool, indent: usize) -> Self {
         JsonSerializer {
             writer,
             compact,
-            indent: 0,
+            indent,
         }
     }
 
@@ -86,28 +86,32 @@ impl<W> JsonSerializer<W>
 }
 
 /// Serialize the given data structure as JSON into the IO stream.
-pub fn to_writer<W, T: ?Sized>(writer: W, value: &T, compact: bool) -> Result<(), EncodeJsonError>
+pub fn to_writer<W, T: ?Sized>(writer: W,
+                               value: &T,
+                               compact: bool,
+                               indent: usize)
+                               -> Result<(), EncodeJsonError>
     where W: io::Write,
           T: Serialize
 {
-    let mut ser = JsonSerializer::new(writer, compact);
+    let mut ser = JsonSerializer::new(writer, compact, indent);
     value.serialize(&mut ser)
 }
 
 /// Serialize the given data structure  as JSON into a JSON byte vector.
-pub fn to_vec<T: ?Sized>(value: &T, compact: bool) -> Vec<u8>
+pub fn to_vec<T: ?Sized>(value: &T, compact: bool, indent: usize) -> Vec<u8>
     where T: Serialize
 {
     let mut writer = Vec::with_capacity(128);
-    to_writer(&mut writer, value, compact).unwrap();
+    to_writer(&mut writer, value, compact, indent).unwrap();
     writer
 }
 
 /// Serialize the given data structure as JSON into a `String`.
-pub fn to_string<T: ?Sized>(value: &T, compact: bool) -> String
+pub fn to_string<T: ?Sized>(value: &T, compact: bool, indent: usize) -> String
     where T: Serialize
 {
-    let vec = to_vec(value, compact);
+    let vec = to_vec(value, compact, indent);
     let string = unsafe {
         // We do not emit invalid UTF-8.
         String::from_utf8_unchecked(vec)

@@ -93,6 +93,17 @@ pub fn from_slice<'de, T>(input: &'de [u8]) -> Result<T, DecodeJsonError>
     }
 }
 
+/// Try to parse data from the input, returning the remaining input when done.
+pub fn from_slice_partial<'de, T>(input: &'de [u8]) -> Result<(T, &'de [u8]), DecodeJsonError>
+    where T: DeserializeOwned
+{
+    let mut de = JsonDeserializer::from_slice(input);
+    match Deserialize::deserialize(&mut de) {
+        Ok(t) => Ok((t, de.input)),
+        Err(e) => Err(e),
+    }
+}
+
 fn is_ws(byte: u8) -> bool {
     byte == 0x09 || byte == 0x0A || byte == 0x0D || byte == 0x20
 }
