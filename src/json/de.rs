@@ -4,15 +4,37 @@ use serde::de::{self, Deserializer, Deserialize, DeserializeOwned, DeserializeSe
                 SeqAccess, MapAccess, EnumAccess, VariantAccess, IntoDeserializer};
 use strtod::strtod;
 use base64;
-use encode_unicode::{Utf8Char, Utf16Char, U16UtfExt};
+use encode_unicode::{Utf8Char, Utf16Char, error::InvalidUtf16Tuple};
 
 /// Everything that can go wrong during deserialization.
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum DecodeJsonError {
-    /// Needed more data but got EOF instead.
+    /// Expected more data but the input ended.
     UnexpectedEndOfInput,
     /// A generic syntax error. Any valid json would have been ok, but alas...
     Syntax,
+    /// Expected a comma (`,`) to separate collection elements.
+    Comma,
+    /// Expected a colon (`:`) to separate a key from a value.
+    Colon,
+    /// Expected a decimal digit. Didn't get one. Sad times.
+    Digit,
+    /// Expected hexadecimal digit as part of a unicode escape sequence in a string.
+    HexDigit,
+    /// Expected a unicode escape (because we just parsed a unicode escape of a leading
+    /// surrogate codepoint).
+    UnicodeEscape,
+    /// Could not merge two unicode escapes into a single code point.
+    SurrogatePair(InvalidUtf16Tuple),
+    /// A unicode escape encoded a trailing surrogate codepoint without a preceding
+    /// leading surrogate codepoint.
+    TrailingSurrogate,
+    /// A string contained an unescaped control code point.
+    UnescapedControlCodePoint,
+    /// A string contained a backslash followed by a non-escape character.
+    InvalidEscape,
+    /// A string literal contains a non-utf8 byte sequence.
+    InvalidUtf8String,
     /// A number is valid json but it evaluates to -0 or an infinity
     InvalidNumber,
     /// The content of a string is not utf8, uses wrong escape sequences, etc.
@@ -41,12 +63,19 @@ pub enum DecodeJsonError {
     NotAChar,
     /// Attempted to read a string as base64-encoded bytes, but the string was not valid base64.
     Base64(base64::DecodeError),
+    /// Expected a boolean, found something else.
     ExpectedBool,
+    /// Expected a number, found something else.
     ExpectedNumber,
+    /// Expected a string, found something else.
     ExpectedString,
+    /// Expected null, found something else.
     ExpectedNull,
+    /// Expected an array, found something else.
     ExpectedArray,
+    /// Expected an object, found something else.
     ExpectedObject,
+    /// Expected an enum, found something else.
     ExpectedEnum,
     /// Custom, stringly-typed error.
     Message(String),
@@ -67,6 +96,8 @@ impl de::Error for DecodeJsonError {
 }
 
 /// A structure that deserializes json encoded legacy message values.
+///
+/// https://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf
 pub struct JsonDeserializer<'de> {
     input: &'de [u8],
 }
@@ -108,18 +139,51 @@ fn is_ws(byte: u8) -> bool {
     byte == 0x09 || byte == 0x0A || byte == 0x0D || byte == 0x20
 }
 
-fn not_is_ws(byte: u8) -> bool {
-    !is_ws(byte)
-}
-
 fn is_digit(byte: u8) -> bool {
     byte.is_ascii_digit()
+}
+
+fn is_hex_digit(byte: u8) -> bool {
+    byte.is_ascii_hexdigit()
 }
 
 impl<'de> JsonDeserializer<'de> {
     /// Creates a `Deserializer` from a `&[u8]`.
     pub fn from_slice(input: &'de [u8]) -> Self {
         JsonDeserializer { input }
+    }
+
+    // Unsafely advance the input slice by some number of bytes.
+    fn advance(&mut self, offset: usize) {
+        self.input = &self.input[offset..];
+    }
+
+    // Consumes the next byte and returns it.
+    fn next(&mut self) -> Result<u8, DecodeJsonError> {
+        match self.input.split_first() {
+            Some((head, tail)) => {
+                self.input = tail;
+                Ok(*head)
+            }
+            None => Err(DecodeJsonError::UnexpectedEndOfInput),
+        }
+    }
+
+    // Consumes the expected byt, gives the given error if it is something else
+    fn expect(&mut self, expected: u8, err: DecodeJsonError) -> Result<(), DecodeJsonError> {
+        if self.next()? == expected {
+            Ok(())
+        } else {
+            Err(err)
+        }
+    }
+
+    // Same as expect, but using a predicate.
+    fn expect_pred(&mut self,
+                   pred: fn(u8) -> bool,
+                   err: DecodeJsonError)
+                   -> Result<(), DecodeJsonError> {
+        if pred(self.next()?) { Ok(()) } else { Err(err) }
     }
 
     // Returns the next byte without consuming it.
@@ -135,74 +199,14 @@ impl<'de> JsonDeserializer<'de> {
         self.input.first().map(|b| *b)
     }
 
-    // Unsafely advance the input slice by 1 byte, to be used only after peeking.
-    unsafe fn advance(&mut self) {
-        self.input = std::slice::from_raw_parts(self.input.as_ptr().offset(1),
-                                                self.input.len() - 1);
-    }
-
-    // Unsafely advance the input slice by some bytes.
-    unsafe fn advance_by(&mut self, offset: isize) {
-        self.input = std::slice::from_raw_parts(self.input.as_ptr().offset(offset),
-                                                self.input.len() - (offset as usize));
-    }
-
-    // Consumes the next byte and returns it.
-    fn next(&mut self) -> Result<u8, DecodeJsonError> {
-        match self.input.split_first() {
-            Some((head, tail)) => {
-                self.input = tail;
-                Ok(*head)
-            }
-            None => Err(DecodeJsonError::UnexpectedEndOfInput),
-        }
-    }
-
-    // Skips values while the predicate returns true, returns the first non-true value, consuming
-    // it as well.
-    fn consume_including(&mut self, pred: fn(u8) -> bool) -> Result<u8, DecodeJsonError> {
-        loop {
-            let next = self.next()?;
-            if pred(next) {
-                return Ok(next);
-            }
-        }
-    }
-
-    // Consumes as much whitespace as possible, then consumes the next non-whitespace byte.
-    fn next_ws(&mut self) -> Result<u8, DecodeJsonError> {
-        self.consume_including(not_is_ws)
-    }
-
-    fn expect_ws_err(&mut self, exp: u8, err: DecodeJsonError) -> Result<(), DecodeJsonError> {
-        if self.next_ws()? == exp {
-            Ok(())
-        } else {
-            Err(err)
-        }
-    }
-
-    // Skips values while the predicate returns true, returns the first non-true value but does
-    // not consume it.
-    fn consume_until(&mut self, pred: fn(u8) -> bool) -> Result<u8, DecodeJsonError> {
-        loop {
-            let peeked = self.peek()?;
-            if pred(peeked) {
-                unsafe { self.advance() };
-            } else {
-                return Ok(peeked);
-            }
-        }
-    }
-
     // Skips values while the predicate returns true.
-    fn advance_while(&mut self, pred: fn(u8) -> bool) -> () {
+    fn skip(&mut self, pred: fn(u8) -> bool) -> () {
         loop {
             match self.peek_or_end() {
                 None => return,
                 Some(peeked) => {
                     if pred(peeked) {
-                        unsafe { self.advance() };
+                        self.advance(1);
                     } else {
                         return;
                     }
@@ -211,38 +215,51 @@ impl<'de> JsonDeserializer<'de> {
         }
     }
 
-    // Consumes as much whitespace as possible, then peeks at the next non-whitespace byte.
-    fn peek_ws(&mut self) -> Result<u8, DecodeJsonError> {
-        self.consume_until(is_ws)
+    fn skip_ws(&mut self) -> () {
+        self.skip(is_ws)
     }
 
-    // Consumes the expected byt, gives the given error if it is something else
-    fn expect_err(&mut self, expected: u8, err: DecodeJsonError) -> Result<(), DecodeJsonError> {
-        if self.next()? == expected {
+    // Consumes as much whitespace as possible, then peeks at the next non-whitespace byte.
+    fn peek_ws(&mut self) -> Result<u8, DecodeJsonError> {
+        self.skip_ws();
+        self.peek()
+    }
+
+    fn expect_ws(&mut self, exp: u8, err: DecodeJsonError) -> Result<(), DecodeJsonError> {
+        self.skip_ws();
+        self.expect(exp, err)
+    }
+
+    fn expect_bytes(&mut self, exp: &[u8], err: DecodeJsonError) -> Result<(), DecodeJsonError> {
+        if self.input.starts_with(exp) {
+            self.input = &self.input[exp.len()..];
             Ok(())
         } else {
             Err(err)
         }
     }
 
-    // Same as expect, but using a predicate.
-    fn expect_pred(&mut self, pred: fn(u8) -> bool) -> Result<(), DecodeJsonError> {
-        if pred(self.next()?) {
-            Ok(())
-        } else {
-            Err(DecodeJsonError::Syntax)
+    // Parses the four characters of a unicode escape sequence and returns the codepoint they
+    // encode. Json only allows escaping codepoints in the BMP, that's why it fits into a `u16`.
+    fn parse_unicode_escape(&mut self) -> Result<u16, DecodeJsonError> {
+        let original_input = self.input;
+
+        for _ in 0..4 {
+            self.expect_pred(is_hex_digit, DecodeJsonError::HexDigit)?;
         }
+
+        u16::from_str_radix(unsafe { std::str::from_utf8_unchecked(&original_input[..4]) },
+                            16)
+                .map_err(|_| unreachable!("We already checked for valid input"))
     }
 
     fn parse_bool(&mut self) -> Result<bool, DecodeJsonError> {
-        if self.input.starts_with(b"true") {
-            self.input = &self.input[4..];
-            return Ok(true);
-        } else if self.input.starts_with(b"false") {
-            self.input = &self.input[5..];
-            return Ok(false);
-        } else {
-            Err(DecodeJsonError::ExpectedBool)
+        match self.expect_bytes(b"true", DecodeJsonError::ExpectedBool) {
+            Ok(()) => Ok(true),
+            Err(_) => {
+                self.expect_bytes(b"false", DecodeJsonError::ExpectedBool)
+                    .map(|_| false)
+            }
         }
     }
 
@@ -251,12 +268,9 @@ impl<'de> JsonDeserializer<'de> {
 
         // trailing `-`
         match self.peek() {
-            Ok(0x2D) => unsafe { self.advance() },
+            Ok(0x2D) => self.advance(1),
             Ok(_) => {}
-            Err(DecodeJsonError::UnexpectedEndOfInput) => {
-                return Err(DecodeJsonError::ExpectedNumber)
-            }
-            Err(e) => return Err(e),
+            Err(_) => return Err(DecodeJsonError::ExpectedNumber),
         }
 
         let next = self.next()?;
@@ -264,36 +278,30 @@ impl<'de> JsonDeserializer<'de> {
             // first digit `0` must be followed by `.`
             0x30 => {}
             // first digit nonzero, may be followed by more digits until the `.`
-            0x31...0x39 => self.advance_while(is_digit),
+            0x31...0x39 => self.skip(is_digit),
             _ => return Err(DecodeJsonError::ExpectedNumber),
         }
 
         // `.`, followed by many1 digits
         if let Some(0x2E) = self.peek_or_end() {
-            unsafe {
-                self.advance();
-            }
-            self.expect_pred(is_digit)?;
-            self.advance_while(is_digit);
+            self.advance(1);
+            self.expect_pred(is_digit, DecodeJsonError::Digit)?;
+            self.skip(is_digit);
         }
 
         // `e` or `E`, followed by an optional sign and many1 digits
         match self.peek_or_end() {
             Some(0x45) | Some(0x65) => {
-                unsafe {
-                    self.advance();
-                }
+                self.advance(1);
 
                 // optional `+` or `-`
                 if self.peek()? == 0x2B || self.peek()? == 0x2D {
-                    unsafe {
-                        self.advance();
-                    }
+                    self.advance(1);
                 }
 
                 // many1 digits
-                self.expect_pred(is_digit)?;
-                self.advance_while(is_digit);
+                self.expect_pred(is_digit, DecodeJsonError::Digit)?;
+                self.skip(is_digit);
             }
             _ => {}
         }
@@ -310,7 +318,7 @@ impl<'de> JsonDeserializer<'de> {
 
     // Return a slice beginning and ending with 0x22 (`"`)
     fn parse_naive_string(&mut self) -> Result<&'de [u8], DecodeJsonError> {
-        self.expect_err(0x22, DecodeJsonError::ExpectedString)?;
+        self.expect(0x22, DecodeJsonError::ExpectedString)?;
         let start = self.input;
 
         while self.next()? != 0x22 {
@@ -321,7 +329,7 @@ impl<'de> JsonDeserializer<'de> {
     }
 
     fn parse_string(&mut self) -> Result<String, DecodeJsonError> {
-        self.expect_err(0x22, DecodeJsonError::ExpectedString)?;
+        self.expect(0x22, DecodeJsonError::ExpectedString)?;
 
         let mut decoded = String::new();
 
@@ -329,17 +337,13 @@ impl<'de> JsonDeserializer<'de> {
             match self.peek()? {
                 // terminating `"`, return the decoded string
                 0x22 => {
-                    unsafe {
-                        self.advance();
-                    }
+                    self.advance(1);
                     return Ok(decoded);
                 }
 
                 // `\` introduces an escape sequence
                 0x5C => {
-                    unsafe {
-                        self.advance();
-                    }
+                    self.advance(1);
 
                     match self.next()? {
                         // single character escape sequences
@@ -354,65 +358,44 @@ impl<'de> JsonDeserializer<'de> {
 
                         // unicode escape sequences
                         0x75 => {
-                            if self.input.len() < 4 {
-                                return Err(DecodeJsonError::InvalidStringContent);
-                            }
+                            let cp = self.parse_unicode_escape()?;
 
-                            match u16::from_str_radix(unsafe {
-                                std::str::from_utf8_unchecked(&self.input[..4])
-                            }, 16) {
-                                Ok(code_point) => {
-                                    unsafe {
-                                        self.advance_by(4);
-                                    }
+                            match code_unit_type(cp) {
+                                CodeUnitType::Valid => decoded.push(unsafe {std::char::from_u32_unchecked(cp as u32)}),
 
-                                    if code_point.is_utf16_leading_surrogate() {
-                                        // the unicode escape was for a leading surrogate, which
-                                        // must be followed by another unicode escape which is a
-                                        // trailing surrogate
-                                        self.expect_err(0x5C, DecodeJsonError::InvalidStringContent)?;
-                                        self.expect_err(0x75, DecodeJsonError::InvalidStringContent)?;
-                                        if self.input.len() < 4 {
-                                            return Err(DecodeJsonError::InvalidStringContent);
-                                        }
+                                CodeUnitType::LeadingSurrogate => {
+                                    // the unicode escape was for a leading surrogate, which
+                                    // must be followed by another unicode escape which is a
+                                    // trailing surrogate
+                                    self.expect(0x5C, DecodeJsonError::UnicodeEscape)?;
+                                    self.expect(0x75, DecodeJsonError::UnicodeEscape)?;
+                                    let cp2 = self.parse_unicode_escape()?;
 
-                                        match u16::from_str_radix(unsafe {
-                                            std::str::from_utf8_unchecked(&self.input[..4])
-                                        }, 16) {
-                                            Ok(code_point2) => {
-                                                match Utf16Char::from_tuple((code_point, Some(code_point2))) {
-                                                    Ok(c) => decoded.push(c.into()),
-                                                    Err(_) => return Err(DecodeJsonError::InvalidStringContent),
-                                                }
-                                            }
-                                            Err(_) => return Err(DecodeJsonError::InvalidStringContent),
-                                        }
-                                    } else {
-                                        match std::char::from_u32(code_point as u32) {
-                                            Some(c) => decoded.push(c),
-                                            None => return Err(DecodeJsonError::InvalidStringContent),
-                                        }
+                                    match Utf16Char::from_tuple((cp, Some(cp2))) {
+                                        Ok(c) => decoded.push(c.into()),
+                                        Err(e) => return Err(DecodeJsonError::SurrogatePair(e)),
                                     }
                                 }
-                                Err(_) => return Err(DecodeJsonError::InvalidStringContent),
+
+                                CodeUnitType::TrailingSurrogate => return Err(DecodeJsonError::TrailingSurrogate),
                             }
                         }
 
                         // Nothing else may follow an unescaped `\`
-                        _ => return Err(DecodeJsonError::InvalidStringContent),
+                        _ => return Err(DecodeJsonError::InvalidEscape),
                     }
                 }
 
                 // the control code points must be escaped
-                0x00...0x1F => return Err(DecodeJsonError::InvalidStringContent),
+                0x00...0x1F => return Err(DecodeJsonError::UnescapedControlCodePoint),
 
                 // a regular utf8-encoded code point (unless it is malformed)
                 _ => {
                     match Utf8Char::from_slice_start(self.input) {
-                        Err(_) => return Err(DecodeJsonError::InvalidStringContent),
+                        Err(_) => return Err(DecodeJsonError::InvalidUtf8String),
                         Ok((_, len)) => unsafe {
                             decoded.push_str(std::str::from_utf8_unchecked(&self.input[..len]));
-                            self.advance_by(len as isize);
+                            self.advance(len);
                         },
                     }
                 }
@@ -421,12 +404,28 @@ impl<'de> JsonDeserializer<'de> {
     }
 
     fn parse_null(&mut self) -> Result<(), DecodeJsonError> {
-        if self.input.starts_with(b"null") {
-            self.input = &self.input[4..];
-            return Ok(());
-        } else {
-            Err(DecodeJsonError::ExpectedNull)
-        }
+        self.expect_bytes(b"null", DecodeJsonError::ExpectedNull)
+    }
+}
+
+// Every utf16 code unit (a `u16`) falls into one of these categories.
+enum CodeUnitType {
+    // A valid code point in the BMP: either between 0x0000 and 0xD7FF (inclusive)
+    // or between 0xE000 and 0xFFFF (inclusive)
+    Valid,
+    // Leading surrogate: between 0xD800 and 0xDBFF (inclusive)
+    LeadingSurrogate,
+    // Trailing surrogate: between 0xDC00 and 0xDFFF (inclusive)
+    TrailingSurrogate,
+}
+
+// Maps a `u16` to its `CodeUnitType`.
+fn code_unit_type(c: u16) -> CodeUnitType {
+    match c {
+        0x0000...0xD7FF | 0xE000...0xFFFF => CodeUnitType::Valid,
+        0xD800...0xDBFF => CodeUnitType::LeadingSurrogate,
+        0xDC00...0xDFFF => CodeUnitType::TrailingSurrogate,
+        _ => unreachable!("The above patterns are exhaustive"),
     }
 }
 
@@ -664,9 +663,9 @@ impl<'de, 'a> Deserializer<'de> for &'a mut JsonDeserializer<'de> {
     fn deserialize_seq<V>(mut self, visitor: V) -> Result<V::Value, DecodeJsonError>
         where V: Visitor<'de>
     {
-        self.expect_err(0x5B, DecodeJsonError::ExpectedArray)?;
+        self.expect(0x5B, DecodeJsonError::ExpectedArray)?;
         let value = visitor.visit_seq(CollectionAccessor::new(&mut self))?;
-        self.expect_ws_err(0x5D, DecodeJsonError::Syntax)?;
+        self.expect_ws(0x5D, DecodeJsonError::Syntax)?; // Can't fail
         Ok(value)
     }
 
@@ -689,9 +688,9 @@ impl<'de, 'a> Deserializer<'de> for &'a mut JsonDeserializer<'de> {
     fn deserialize_map<V>(mut self, visitor: V) -> Result<V::Value, DecodeJsonError>
         where V: Visitor<'de>
     {
-        self.expect_err(0x7B, DecodeJsonError::ExpectedObject)?;
+        self.expect(0x7B, DecodeJsonError::ExpectedObject)?;
         let value = visitor.visit_map(CollectionAccessor::new(&mut self))?;
-        self.expect_ws_err(0x7D, DecodeJsonError::Syntax)?;
+        self.expect_ws(0x7D, DecodeJsonError::Syntax)?; // Can't fail
         Ok(value)
     }
 
@@ -718,7 +717,7 @@ impl<'de, 'a> Deserializer<'de> for &'a mut JsonDeserializer<'de> {
         } else if self.next()? == 0x7B {
             // Visit a newtype variant, tuple variant, or struct variant.
             let value = visitor.visit_enum(Enum::new(self))?;
-            self.expect_ws_err(0x7D, DecodeJsonError::Syntax)?;
+            self.expect_ws(0x7D, DecodeJsonError::Syntax)?; // Can't fail
             Ok(value)
         } else {
             Err(DecodeJsonError::ExpectedEnum)
@@ -764,10 +763,10 @@ impl<'de, 'a> SeqAccess<'de> for CollectionAccessor<'de, 'a> {
         if self.first {
             self.first = false;
         } else {
-            self.des.expect_ws_err(0x2C, DecodeJsonError::Syntax)?;
+            self.des.expect_ws(0x2C, DecodeJsonError::Comma)?;
         }
 
-        self.des.consume_until(is_ws)?;
+        self.des.peek_ws()?;
 
         seed.deserialize(&mut *self.des).map(Some)
     }
@@ -788,19 +787,19 @@ impl<'de, 'a> MapAccess<'de> for CollectionAccessor<'de, 'a> {
         if self.first {
             self.first = false;
         } else {
-            self.des.expect_ws_err(0x2C, DecodeJsonError::Syntax)?;
+            self.des.expect_ws(0x2C, DecodeJsonError::Comma)?;
         }
 
-        self.des.consume_until(is_ws)?;
+        self.des.peek_ws()?;
         seed.deserialize(&mut *self.des).map(Some)
     }
 
     fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value, DecodeJsonError>
         where V: DeserializeSeed<'de>
     {
-        self.des.expect_ws_err(0x3A, DecodeJsonError::Syntax)?; // `:`
+        self.des.expect_ws(0x3A, DecodeJsonError::Colon)?; // `:`
 
-        self.des.consume_until(is_ws)?;
+        self.des.peek_ws()?;
         seed.deserialize(&mut *self.des)
     }
 }
@@ -822,11 +821,11 @@ impl<'de, 'a> EnumAccess<'de> for Enum<'a, 'de> {
     fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self::Variant), DecodeJsonError>
         where V: DeserializeSeed<'de>
     {
-        self.des.consume_until(is_ws)?;
+        self.des.peek_ws()?;
         let val = seed.deserialize(&mut *self.des)?;
-        self.des.expect_ws_err(0x3A, DecodeJsonError::Syntax)?; // `:`
+        self.des.expect_ws(0x3A, DecodeJsonError::Colon)?; // `:`
 
-        self.des.consume_until(is_ws)?;
+        self.des.peek_ws()?;
         Ok((val, self))
     }
 }
@@ -861,28 +860,3 @@ impl<'de, 'a> VariantAccess<'de> for Enum<'a, 'de> {
         de::Deserializer::deserialize_map(self.des, visitor)
     }
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use super::super::{Value, from_slice, to_vec};
-//
-//     fn check(input: &[u8]) {
-//         let val = from_slice::<Value>(input).unwrap();
-//         println!("{:?}", val);
-//         let enc = to_vec(&val, true);
-//         let enc_string = std::str::from_utf8(&enc).unwrap().to_string();
-//         println!("{}\n{:?}\n{:x?}", enc_string, enc_string, enc);
-//         let redecoded = from_slice::<Value>(&enc[..]).unwrap();
-//         assert_eq!(val, redecoded);
-//     }
-//
-//     #[test]
-//     fn regression() {
-//         // check(&[34, 110, 193, 146, 34][..]);
-//         // check(br##"[[][[[][][]][]]]"##);
-//         // check(b"888e-39919999992999999999999999999999999999999999993");
-//         // check(br##"11111111111111111111111111111111111111111111111111111111111111111111111111e-323"##);
-//         // check(br##"8391.8999999999999999999928e-328e-8"##);
-//         // check(br##"839999999999999999999928e-338e-9"##);
-//     }
-// }
