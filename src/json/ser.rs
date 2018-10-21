@@ -456,21 +456,19 @@ impl<'a, W: io::Write> CollectionSerializer<'a, W> {
     }
 
     fn end_array(&mut self) -> Result<(), io::Error> {
-        self.ser.writer.write_all(b"]")?;
         self.ser.indent -= 1;
         if !self.empty {
             self.ser.newline()?;
         }
-        Ok(())
+        self.ser.writer.write_all(b"]")
     }
 
     fn end_object(&mut self) -> Result<(), io::Error> {
-        self.ser.writer.write_all(b"}")?;
         self.ser.indent -= 1;
         if !self.empty {
             self.ser.newline()?;
         }
-        Ok(())
+        self.ser.writer.write_all(b"}")
     }
 }
 
