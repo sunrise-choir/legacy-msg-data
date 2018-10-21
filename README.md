@@ -1,3 +1,3 @@
 # SSB Legacy MSG Data
 
-Rust implementation of the data and encodings used for secure scuttlebutt legacy messages, copying the design of [serde](https://serde.rs/).
+Rust implementation of the [ssb legacy data format](https://spec.scuttlebutt.nz/datamodel.html).

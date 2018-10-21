@@ -1,5 +1,5 @@
 //! This crate implements the ssb
-//! [legacy data format](https://spec.scuttlebutt.nz/datamodel.html#abstract-data-model),
+//! [legacy data format](https://spec.scuttlebutt.nz/datamodel.html),
 //! i.e. the free-form data that forms the content of legacy messages.
 //!
 //! Three encodings are implemented: the

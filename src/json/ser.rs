@@ -12,6 +12,8 @@ use super::super::{LegacyF64, is_i64_valid, is_u64_valid};
 #[derive(Debug)]
 pub enum EncodeJsonError {
     /// An IO error occured on the underlying writer.
+    ///
+    /// When serializing directly into a `Vec<u8>` or `String`, this error never occurs.
     Io(io::Error),
     /// Tried to serialize a number forbidden by the ssb data format (an inifinity, NaN or -0.0).
     InvalidFloat(f64),
@@ -62,6 +64,8 @@ impl<W> JsonSerializer<W>
     ///
     /// If `compact`, this omits all whitespace. For signing or signature checking,
     /// set `compact` to `false`.
+    ///
+    /// If `compact` is `true`, then `indent` is used as the starting indentation level.
     #[inline]
     pub fn new(writer: W, compact: bool, indent: usize) -> Self {
         JsonSerializer {
@@ -77,49 +81,75 @@ impl<W> JsonSerializer<W>
     }
 
     // Writes the correct number of spaces as indentation.
-    fn write_indent(&mut self) -> Result<(), EncodeJsonError> {
+    fn write_indent(&mut self) -> Result<(), io::Error> {
         for _ in 0..self.indent {
             self.writer.write_all(b"  ")?;
+        }
+        Ok(())
+    }
+
+    fn begin_object(&mut self) -> Result<(), io::Error> {
+        self.writer.write_all(b"{")?;
+        self.indent += 1;
+        Ok(())
+    }
+
+    fn end_object(&mut self) -> Result<(), io::Error> {
+        self.writer.write_all(b"}")?;
+        self.indent -= 1;
+        Ok(())
+    }
+
+    fn begin_array(&mut self) -> Result<(), io::Error> {
+        self.writer.write_all(b"[")?;
+        self.indent += 1;
+        Ok(())
+    }
+
+    fn colon(&mut self) -> Result<(), io::Error> {
+        self.writer.write_all(b":")?;
+
+        if !self.compact {
+            self.writer.write_all(b" ")?;
+        }
+
+        Ok(())
+    }
+
+    fn newline(&mut self) -> Result<(), io::Error> {
+        if !self.compact {
+            self.writer.write_all(b"\n")?;
+            self.write_indent()?;
         }
         Ok(())
     }
 }
 
 /// Serialize the given data structure as JSON into the IO stream.
-pub fn to_writer<W, T: ?Sized>(writer: W,
-                               value: &T,
-                               compact: bool,
-                               indent: usize)
-                               -> Result<(), EncodeJsonError>
+pub fn to_writer<W, T: ?Sized>(writer: W, value: &T, compact: bool) -> Result<(), EncodeJsonError>
     where W: io::Write,
           T: Serialize
 {
-    let mut ser = JsonSerializer::new(writer, compact, indent);
+    let mut ser = JsonSerializer::new(writer, compact, 0);
     value.serialize(&mut ser)
 }
 
 /// Serialize the given data structure  as JSON into a JSON byte vector.
-pub fn to_vec<T: ?Sized>(value: &T,
-                         compact: bool,
-                         indent: usize)
-                         -> Result<Vec<u8>, EncodeJsonError>
+pub fn to_vec<T: ?Sized>(value: &T, compact: bool) -> Result<Vec<u8>, EncodeJsonError>
     where T: Serialize
 {
     let mut writer = Vec::with_capacity(128);
-    to_writer(&mut writer, value, compact, indent).map(|_| writer)
+    to_writer(&mut writer, value, compact).map(|_| writer)
 }
 
 /// Serialize the given data structure as JSON into a `String`.
-pub fn to_string<T: ?Sized>(value: &T,
-                            compact: bool,
-                            indent: usize)
-                            -> Result<String, EncodeJsonError>
+pub fn to_string<T: ?Sized>(value: &T, compact: bool) -> Result<String, EncodeJsonError>
     where T: Serialize
 {
-    to_vec(value, compact, indent).map(|bytes| unsafe {
-                                           // We do not emit invalid UTF-8.
-                                           String::from_utf8_unchecked(bytes)
-                                       })
+    to_vec(value, compact).map(|bytes| unsafe {
+                                   // We do not emit invalid UTF-8.
+                                   String::from_utf8_unchecked(bytes)
+                               })
 }
 
 impl<'a, W> Serializer for &'a mut JsonSerializer<W>
@@ -137,9 +167,10 @@ impl<'a, W> Serializer for &'a mut JsonSerializer<W>
     type SerializeStructVariant = CollectionSerializer<'a, W>;
 
     fn is_human_readable(&self) -> bool {
-        !self.compact
+        true
     }
 
+    // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-booleans
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
         let s = if v {
             b"true" as &[u8]
@@ -193,6 +224,7 @@ impl<'a, W> Serializer for &'a mut JsonSerializer<W>
         self.serialize_f64(v as f64)
     }
 
+    // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-floats
     fn serialize_f64(self, v: f64) -> Result<Self::Ok, Self::Error> {
         if LegacyF64::is_valid(v) {
             let mut buffer = ryu_ecmascript::Buffer::new();
@@ -207,6 +239,7 @@ impl<'a, W> Serializer for &'a mut JsonSerializer<W>
         self.serialize_str(&v.to_string())
     }
 
+    // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-strings
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
         self.writer.write_all(b"\"")?;
 
@@ -255,6 +288,10 @@ impl<'a, W> Serializer for &'a mut JsonSerializer<W>
             .map_err(EncodeJsonError::Io)
     }
 
+    // Derializing as base64.
+    //
+    // This not mandated by the spec in any way. From the spec's perspective, this
+    // outputs a string like any other.
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
         self.serialize_str(&base64::encode(v))
     }
@@ -269,6 +306,7 @@ impl<'a, W> Serializer for &'a mut JsonSerializer<W>
         value.serialize(self)
     }
 
+    // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-null
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
         Ok(self.writer.write_all(b"null")?)
     }
@@ -294,6 +332,7 @@ impl<'a, W> Serializer for &'a mut JsonSerializer<W>
         value.serialize(self)
     }
 
+    // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-objects
     fn serialize_newtype_variant<T: ?Sized>(self,
                                             _name: &'static str,
                                             _variant_index: u32,
@@ -302,38 +341,24 @@ impl<'a, W> Serializer for &'a mut JsonSerializer<W>
                                             -> Result<Self::Ok, Self::Error>
         where T: Serialize
     {
-        self.writer.write_all(b"{")?;
-        self.indent += 1;
-
-        if !self.compact {
-            self.writer.write_all(b"\n")?;
-            self.write_indent()?;
-        }
+        self.begin_object()?;
+        self.newline()?;
 
         variant.serialize(&mut *self)?;
-        self.writer.write_all(b":")?;
-
-        if !self.compact {
-            self.writer.write_all(b" ")?;
-        }
-
+        self.colon()?;
         value.serialize(&mut *self)?;
 
-        if !self.compact {
-            self.writer.write_all(b"\n")?;
-            self.write_indent()?;
-        }
-
-        self.indent -= 1;
-        self.writer.write_all(b"}").map_err(EncodeJsonError::Io)
+        self.newline()?;
+        self.end_object()?;
+        Ok(())
     }
 
+    // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-arrays
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, EncodeJsonError> {
         match _len {
             None => return Err(EncodeJsonError::UnknownLength),
             Some(len) => {
-                self.writer.write_all(b"[")?;
-                self.indent += 1;
+                self.begin_array()?;
                 Ok(CollectionSerializer::new(&mut *self, len == 0))
             }
         }
@@ -350,39 +375,30 @@ impl<'a, W> Serializer for &'a mut JsonSerializer<W>
         self.serialize_seq(Some(len))
     }
 
+    // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-objects
+    // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-arrays
     fn serialize_tuple_variant(self,
                                _name: &'static str,
                                _variant_index: u32,
                                variant: &'static str,
                                _len: usize)
                                -> Result<Self::SerializeTupleVariant, EncodeJsonError> {
-        self.writer.write_all(b"{")?;
-        self.indent += 1;
-
-        if !self.compact {
-            self.writer.write_all(b"\n")?;
-            self.write_indent()?;
-        }
+        self.begin_object()?;
+        self.newline()?;
 
         variant.serialize(&mut *self)?;
-        self.writer.write_all(b":")?;
-
-        if !self.compact {
-            self.writer.write_all(b" ")?;
-        }
-
-        self.writer.write_all(b"[")?;
-        self.indent += 1;
+        self.colon()?;
+        self.begin_array()?;
 
         Ok(CollectionSerializer::new(&mut *self, false))
     }
 
+    // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-objects
     fn serialize_map(self, len_: Option<usize>) -> Result<Self::SerializeMap, EncodeJsonError> {
         match len_ {
             None => return Err(EncodeJsonError::UnknownLength),
             Some(len) => {
-                self.writer.write_all(b"{")?;
-                self.indent += 1;
+                self.begin_object()?;
                 Ok(CollectionSerializer::new(&mut *self, len == 0))
             }
         }
@@ -395,29 +411,19 @@ impl<'a, W> Serializer for &'a mut JsonSerializer<W>
         self.serialize_map(Some(len))
     }
 
+    // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-objects
     fn serialize_struct_variant(self,
                                 _name: &'static str,
                                 _variant_index: u32,
                                 variant: &'static str,
                                 _len: usize)
                                 -> Result<Self::SerializeStructVariant, EncodeJsonError> {
-        self.writer.write_all(b"{")?;
-        self.indent += 1;
-
-        if !self.compact {
-            self.writer.write_all(b"\n")?;
-            self.write_indent()?;
-        }
+        self.begin_object()?;
+        self.newline()?;
 
         variant.serialize(&mut *self)?;
-        self.writer.write_all(b":")?;
-
-        if !self.compact {
-            self.writer.write_all(b" ")?;
-        }
-
-        self.writer.write_all(b"{")?;
-        self.indent += 1;
+        self.colon()?;
+        self.begin_object()?;
 
         Ok(CollectionSerializer::new(&mut *self, false))
     }
@@ -438,6 +444,34 @@ impl<'a, W: io::Write> CollectionSerializer<'a, W> {
             empty,
         }
     }
+
+    fn comma(&mut self) -> Result<(), io::Error> {
+        if self.first {
+            self.first = false;
+        } else {
+            self.ser.writer.write_all(b",")?;
+        }
+
+        self.ser.newline()
+    }
+
+    fn end_array(&mut self) -> Result<(), io::Error> {
+        self.ser.writer.write_all(b"]")?;
+        self.ser.indent -= 1;
+        if !self.empty {
+            self.ser.newline()?;
+        }
+        Ok(())
+    }
+
+    fn end_object(&mut self) -> Result<(), io::Error> {
+        self.ser.writer.write_all(b"}")?;
+        self.ser.indent -= 1;
+        if !self.empty {
+            self.ser.newline()?;
+        }
+        Ok(())
+    }
 }
 
 impl<'a, W> SerializeSeq for CollectionSerializer<'a, W>
@@ -449,35 +483,14 @@ impl<'a, W> SerializeSeq for CollectionSerializer<'a, W>
     fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
         where T: Serialize
     {
-        if self.first {
-            self.first = false;
-        } else {
-            self.ser.writer.write_all(b",")?;
-        }
-
-        if !self.ser.compact {
-            self.ser.writer.write_all(b"\n")?;
-            self.ser.write_indent()?;
-        }
-
+        self.comma()?;
         value.serialize(&mut *self.ser)?;
-
         Ok(())
     }
 
-    fn end(self) -> Result<Self::Ok, Self::Error> {
-        if !self.ser.compact {
-            self.ser.indent -= 1;
-            if !self.empty {
-                self.ser.writer.write_all(b"\n")?;
-                self.ser.write_indent()?;
-            }
-        }
-
-        self.ser
-            .writer
-            .write_all(b"]")
-            .map_err(EncodeJsonError::Io)
+    fn end(mut self) -> Result<Self::Ok, Self::Error> {
+        self.end_array()?;
+        Ok(())
     }
 }
 
@@ -527,29 +540,10 @@ impl<'a, W> SerializeTupleVariant for CollectionSerializer<'a, W>
         SerializeSeq::serialize_element(self, value)
     }
 
-    fn end(self) -> Result<Self::Ok, Self::Error> {
-        if !self.ser.compact {
-            self.ser.indent -= 1;
-            if !self.empty {
-                self.ser.writer.write_all(b"\n")?;
-                self.ser.write_indent()?;
-            }
-        }
-
-        self.ser.writer.write_all(b"]")?;
-
-        if !self.ser.compact {
-            self.ser.indent -= 1;
-            if !self.empty {
-                self.ser.writer.write_all(b"\n")?;
-                self.ser.write_indent()?;
-            }
-        }
-
-        self.ser
-            .writer
-            .write_all(b"}")
-            .map_err(EncodeJsonError::Io)
+    fn end(mut self) -> Result<Self::Ok, Self::Error> {
+        self.end_array()?;
+        self.end_object()?;
+        Ok(())
     }
 }
 
@@ -562,30 +556,10 @@ impl<'a, W> SerializeMap for CollectionSerializer<'a, W>
     fn serialize_key<T: ?Sized>(&mut self, key: &T) -> Result<(), Self::Error>
         where T: Serialize
     {
-        if self.first {
-            self.first = false;
-        } else {
-            self.ser.writer.write_all(b",")?;
-        }
-
-        if !self.ser.compact {
-            self.ser.writer.write_all(b"\n")?;
-            self.ser.write_indent()?;
-        }
-
+        self.comma()?;
         key.serialize(&mut *self.ser)?;
-
-        if self.ser.compact {
-            self.ser
-                .writer
-                .write_all(b":")
-                .map_err(EncodeJsonError::Io)
-        } else {
-            self.ser
-                .writer
-                .write_all(b": ")
-                .map_err(EncodeJsonError::Io)
-        }
+        self.ser.colon()?;
+        Ok(())
     }
 
     fn serialize_value<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
@@ -595,19 +569,9 @@ impl<'a, W> SerializeMap for CollectionSerializer<'a, W>
         Ok(())
     }
 
-    fn end(self) -> Result<Self::Ok, Self::Error> {
-        if !self.ser.compact {
-            self.ser.indent -= 1;
-            if !self.empty {
-                self.ser.writer.write_all(b"\n")?;
-                self.ser.write_indent()?;
-            }
-        }
-
-        self.ser
-            .writer
-            .write_all(b"}")
-            .map_err(EncodeJsonError::Io)
+    fn end(mut self) -> Result<Self::Ok, Self::Error> {
+        self.end_object()?;
+        Ok(())
     }
 }
 
@@ -640,28 +604,9 @@ impl<'a, W> SerializeStructVariant for CollectionSerializer<'a, W>
         SerializeMap::serialize_entry(self, key, value)
     }
 
-    fn end(self) -> Result<Self::Ok, Self::Error> {
-        if !self.ser.compact {
-            self.ser.indent -= 1;
-            if !self.empty {
-                self.ser.writer.write_all(b"\n")?;
-                self.ser.write_indent()?;
-            }
-        }
-
-        self.ser.writer.write_all(b"}")?;
-
-        if !self.ser.compact {
-            self.ser.indent -= 1;
-            if !self.empty {
-                self.ser.writer.write_all(b"\n")?;
-                self.ser.write_indent()?;
-            }
-        }
-
-        self.ser
-            .writer
-            .write_all(b"}")
-            .map_err(EncodeJsonError::Io)
+    fn end(mut self) -> Result<Self::Ok, Self::Error> {
+        self.end_object()?;
+        self.end_object()?;
+        Ok(())
     }
 }
