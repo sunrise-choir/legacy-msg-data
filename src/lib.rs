@@ -1,19 +1,11 @@
-//! This crate implements the ssb [legacy data format](TODO), i.e. the
-//! free-form data that forms the content of legacy messages.
+//! This crate implements the ssb
+//! [legacy data format](https://spec.scuttlebutt.nz/datamodel.html#abstract-data-model),
+//! i.e. the free-form data that forms the content of legacy messages.
 //!
-//! The abstract data format of legacy messages is defined in the same way the
-//! [serde](https://crates.io/crates/serde) crate defines its data format.
-//! The documentation of this crate assumes familiarity with serde's split
-//! between [data model and data formats](https://serde.rs/data-model.html).
-//! All relevant abstractions link to their serde counterparts and summarize
-//! where they deviate from serde.
-//!
-//! The definition of the abstract data format lives in the [`de`](de) and [`ser`](ser) modules,
-//! implementations of json and cbor encodings live in the [`json`](json) and [`cbor`](cbor) modules.
-//!
-//! A lot of conveniences are left out on purpose, you should not build new applications
-//! based on legacy data. The target audience of this crate are ssb server developers and
-//! library authors, not application developers.
+//! Three encodings are implemented: the
+//! [signing encoding](https://spec.scuttlebutt.nz/datamodel.html#signing-encoding), the
+//! [json transport encoding](https://spec.scuttlebutt.nz/datamodel.html#json-transport-encoding),
+//! and the [cbor encoding](TODO).
 #![warn(missing_docs)]
 
 extern crate indexmap;
@@ -31,10 +23,10 @@ use std::cmp::Ordering;
 use std::fmt;
 
 /// A wrapper around `f64` to indicate that the float is compatible with the ssb legacy message
-/// data model, i.e. it is neither an infinity, nor `-0.0`, nor a `NaN`.
+/// data model, i.e. it is [neither an infinity, nor `-0.0`, nor a `NaN`](https://spec.scuttlebutt.nz/datamodel.html#floats).
 ///
 /// Because a `LegacyF64` is never `NaN`, it can implement `Eq` and `Ord`, which regular `f64`
-/// does not.
+/// can not.
 ///
 /// To obtain the inner value, use the `From<LegacyF64> for f64` impl.
 #[derive(Clone, Copy, PartialEq, PartialOrd, Default)]
@@ -63,8 +55,8 @@ impl LegacyF64 {
 
     /// Wraps the given `f64` as a `LegacyF64` without checking if it is valid.
     ///
-    /// When the `debug_assertions` feature is enabled (when compiling without optimizations), this
-    /// function panics when given an invalid `f64`.
+    /// When the `debug_assertions` feature is enabled (when compiling without optimizations),
+    /// this function panics when given an invalid `f64`.
     ///
     /// # Safety
     /// You must not pass infinity, negative infinity, negative zero or a `NaN` to this
@@ -84,7 +76,8 @@ impl LegacyF64 {
         LegacyF64(f)
     }
 
-    /// Checks whether a given `f64` may be used as a `LegacyF64`.
+    /// Checks whether a given `f64`
+    /// [may be used](https://spec.scuttlebutt.nz/datamodel.html#floats) as a `LegacyF64`.
     pub fn is_valid(f: f64) -> bool {
         if f == 0.0 {
             f.is_sign_positive()
@@ -120,16 +113,6 @@ impl From<LegacyF64> for f64 {
     }
 }
 
-/// Checks whether a given `f64` is allowed for usage in ssb data (it is
-/// neither an infinity, nor a NaN, nor negative zero).
-pub fn is_f64_valid(f: f64) -> bool {
-    if f == 0.0 {
-        f.is_sign_positive()
-    } else {
-        f.is_finite() && (f != 0.0)
-    }
-}
-
 /// Checks whether a given `u64` is allowed for usage in ssb data (it is
 /// not larger than 2^53).
 pub fn is_u64_valid(n: u64) -> bool {
@@ -142,8 +125,14 @@ pub fn is_i64_valid(n: i64) -> bool {
     n < 9007199254740992 && n > -9007199254740992
 }
 
-/// An iterator that yields the [bytes](TODO) needed to compute the hash of a message.
-/// The total number of bytes yielded by this is the length of the message.
+/// An iterator that yields the
+/// [bytes](https://spec.scuttlebutt.nz/datamodel.html#legacy-hash-computation) needed to compute
+/// a hash of some legacy data.
+///
+/// Created by [`to_weird_encoding`](to_weird_encoding).
+///
+/// The total number of bytes yielded by this is also the
+/// [length](https://spec.scuttlebutt.nz/datamodel.html#legacy-length-computation) of the data.
 pub struct WeirdEncodingIterator<'a>(std::iter::Map<std::str::EncodeUtf16<'a>, fn(u16) -> u8>);
 
 impl<'a> Iterator for WeirdEncodingIterator<'a> {
@@ -154,15 +143,20 @@ impl<'a> Iterator for WeirdEncodingIterator<'a> {
     }
 }
 
-/// Create an owned representation of the [weird encoding](TODO) used for hash computation of
-/// legacy ssb messages. The length of this is also the value you need for checking maximum
-/// message size.
+/// Create an owned representation of the
+/// [weird encoding](https://spec.scuttlebutt.nz/datamodel.html#legacy-hash-computation)
+/// used for hash computation of legacy ssb messages. The number of bytes yielded by this
+/// iterator coincides with the
+/// [length](https://spec.scuttlebutt.nz/datamodel.html#legacy-length-computation)
+/// of the data.
 pub fn to_weird_encoding<'a>(s: &'a str) -> WeirdEncodingIterator<'a> {
     WeirdEncodingIterator(s.encode_utf16().map(|x| x as u8))
 }
 
-/// Compute the length of a message. Note that this takes time linear in the length of the message,
-/// so you might want to use a `WeirdEncodingIterator` for computing hash and length in one go.
-pub fn legacy_length(msg: &str) -> usize {
-    to_weird_encoding(msg).count()
+/// Compute the [length](https://spec.scuttlebutt.nz/datamodel.html#legacy-length-computation)
+/// of some data. Note that this takes time linear in the length of the data,
+/// so you might want to use a [`WeirdEncodingIterator`](WeirdEncodingIterator)
+/// for computing hash and length in one go.
+pub fn legacy_length(s: &str) -> usize {
+    to_weird_encoding(s).count()
 }

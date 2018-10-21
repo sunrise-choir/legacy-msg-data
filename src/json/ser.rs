@@ -6,7 +6,7 @@ use serde::ser::{self, Serializer, Serialize, SerializeSeq, SerializeStructVaria
 use ryu_ecmascript;
 use base64;
 
-use super::super::{is_f64_valid, is_i64_valid, is_u64_valid};
+use super::super::{LegacyF64, is_i64_valid, is_u64_valid};
 
 /// Everything that can go wrong during json serialization.
 #[derive(Debug)]
@@ -99,24 +99,27 @@ pub fn to_writer<W, T: ?Sized>(writer: W,
 }
 
 /// Serialize the given data structure  as JSON into a JSON byte vector.
-pub fn to_vec<T: ?Sized>(value: &T, compact: bool, indent: usize) -> Vec<u8>
+pub fn to_vec<T: ?Sized>(value: &T,
+                         compact: bool,
+                         indent: usize)
+                         -> Result<Vec<u8>, EncodeJsonError>
     where T: Serialize
 {
     let mut writer = Vec::with_capacity(128);
-    to_writer(&mut writer, value, compact, indent).unwrap();
-    writer
+    to_writer(&mut writer, value, compact, indent).map(|_| writer)
 }
 
 /// Serialize the given data structure as JSON into a `String`.
-pub fn to_string<T: ?Sized>(value: &T, compact: bool, indent: usize) -> String
+pub fn to_string<T: ?Sized>(value: &T,
+                            compact: bool,
+                            indent: usize)
+                            -> Result<String, EncodeJsonError>
     where T: Serialize
 {
-    let vec = to_vec(value, compact, indent);
-    let string = unsafe {
-        // We do not emit invalid UTF-8.
-        String::from_utf8_unchecked(vec)
-    };
-    string
+    to_vec(value, compact, indent).map(|bytes| unsafe {
+                                           // We do not emit invalid UTF-8.
+                                           String::from_utf8_unchecked(bytes)
+                                       })
 }
 
 impl<'a, W> Serializer for &'a mut JsonSerializer<W>
@@ -191,7 +194,7 @@ impl<'a, W> Serializer for &'a mut JsonSerializer<W>
     }
 
     fn serialize_f64(self, v: f64) -> Result<Self::Ok, Self::Error> {
-        if is_f64_valid(v) {
+        if LegacyF64::is_valid(v) {
             let mut buffer = ryu_ecmascript::Buffer::new();
             let s = buffer.format::<f64>(v.into());
             Ok(self.writer.write_all(s.as_bytes())?)
