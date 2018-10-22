@@ -6,6 +6,8 @@ use strtod::strtod;
 use base64;
 use encode_unicode::{Utf8Char, Utf16Char, error::InvalidUtf16Tuple};
 
+use super::super::LegacyF64;
+
 /// Everything that can go wrong during deserialization.
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum DecodeJsonError {
@@ -37,10 +39,6 @@ pub enum DecodeJsonError {
     InvalidUtf8String,
     /// A number is valid json but it evaluates to -0 or an infinity
     InvalidNumber,
-    /// The content of a string is not utf8, uses wrong escape sequences, etc.
-    InvalidStringContent,
-    /// An object has multiple entries with the equal keys.
-    DuplicateKey,
     /// The input contained valid json followed by at least one non-whitespace byte.
     TrailingCharacters,
     /// Attempted to parse a number as an `i8` that was out of bounds.
@@ -307,12 +305,15 @@ impl<'de> JsonDeserializer<'de> {
         }
 
         // done parsing the number, convert it to a rust value
-        match strtod(unsafe {
+        let f = strtod(unsafe {
                          std::str::from_utf8_unchecked(&original_input[..(original_input.len() -
                                                            self.input.len())])
-                     }) {
-            Some(parsed) => Ok(parsed),
-            None => Err(DecodeJsonError::InvalidNumber),
+                     }).unwrap(); // We already checked that the input is a valid number
+
+        if LegacyF64::is_valid(f) {
+            Ok(f)
+        } else {
+            Err(DecodeJsonError::InvalidNumber)
         }
     }
 
