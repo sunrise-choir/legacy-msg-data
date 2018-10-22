@@ -13,6 +13,8 @@ extern crate ryu_ecmascript;
 extern crate strtod;
 extern crate encode_unicode;
 extern crate serde;
+#[macro_use]
+extern crate serde_derive;
 extern crate base64;
 
 pub mod value;
@@ -29,7 +31,7 @@ use std::fmt;
 /// can not.
 ///
 /// To obtain the inner value, use the `From<LegacyF64> for f64` impl.
-#[derive(Clone, Copy, PartialEq, PartialOrd, Default)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Default, Serialize, Deserialize)]
 pub struct LegacyF64(f64);
 
 impl LegacyF64 {
