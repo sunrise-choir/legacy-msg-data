@@ -126,7 +126,10 @@ impl<W> JsonSerializer<W>
 }
 
 /// Serialize the given data structure as JSON into the IO stream.
-pub fn to_writer<W, T: ?Sized>(writer: W, value: &T, compact: bool) -> Result<(), EncodeJsonError>
+pub fn to_writer<W, T: ?Sized>(writer: &mut W,
+                               value: &T,
+                               compact: bool)
+                               -> Result<(), EncodeJsonError>
     where W: io::Write,
           T: Serialize
 {

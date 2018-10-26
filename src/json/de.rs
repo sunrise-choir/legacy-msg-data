@@ -151,7 +151,7 @@ impl<'de> JsonDeserializer<'de> {
         JsonDeserializer { input }
     }
 
-    // Unsafely advance the input slice by some number of bytes.
+    // Advance the input slice by some number of bytes.
     fn advance(&mut self, offset: usize) {
         self.input = &self.input[offset..];
     }

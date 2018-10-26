@@ -160,5 +160,13 @@ pub fn to_weird_encoding<'a>(s: &'a str) -> WeirdEncodingIterator<'a> {
 /// so you might want to use a [`WeirdEncodingIterator`](WeirdEncodingIterator)
 /// for computing hash and length in one go.
 pub fn legacy_length(s: &str) -> usize {
-    to_weird_encoding(s).count()
+    let mut len = 0;
+    for c in s.chars() {
+        if c as u32 <= 0xFFFF {
+            len += 1;
+        } else {
+            len += 2;
+        }
+    }
+    len
 }
