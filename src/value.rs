@@ -11,7 +11,7 @@ use serde::{
     de::{Deserialize, Deserializer, Visitor, SeqAccess, MapAccess, Error},
 };
 
-use super::LegacyF64;
+use super::{LegacyF64, legacy_length};
 
 // The maximum capacity of entries to preallocate for arrays and objects. Even if malicious input
 // claims to contain a much larger collection, only this much memory will be blindly allocated.
@@ -117,8 +117,6 @@ impl<'de> Visitor<'de> for ValueVisitor {
 
     fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error> where A: MapAccess<'de> {
         // use the size hint, but put a maximum to the allocation because we can't trust the input
-
-        // use the size hint, but put a maximum to the allocation because we can't trust the input
         let mut m = RidiculousStringMap::with_capacity(std::cmp::min(map.size_hint().unwrap_or(0),
                                                          MAX_ALLOC));
 
@@ -132,18 +130,122 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 }
 
-fn is_nat_str(s: &str) -> bool {
-    match s.as_bytes().split_first() {
-        Some((0x31...0x39, tail)) => {
-            if tail.iter().all(|byte| *byte >= 0x30 && *byte <= 0x39) {
-                true
-            } else {
-                false
+/// Represents any valid ssb legacy message value that can be used as the content of a message,
+/// preserving the order of object entries.
+///
+/// On deserialization, this enforces that the value is an object with a correct `type` entry.
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub struct ContentValue(pub Value);
+
+impl Serialize for ContentValue {
+    #[inline]
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ContentValue {
+    fn deserialize<D>(deserializer: D) -> Result<ContentValue, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_map(ContentValueVisitor::new())
+    }
+}
+
+struct ContentValueVisitor(bool);
+
+impl ContentValueVisitor {
+    fn new() -> ContentValueVisitor {
+        ContentValueVisitor(true)
+    }
+}
+
+impl<'de> Visitor<'de> for ContentValueVisitor {
+    type Value = ContentValue;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("any valid legacy ssb content value")
+    }
+
+    fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E> {
+        Ok(ContentValue(Value::Bool(v)))
+    }
+
+    fn visit_f64<E: Error>(self, v: f64) -> Result<Self::Value, E> {
+        match LegacyF64::from_f64(v) {
+            Some(f) => Ok(ContentValue(Value::Float(f))),
+            None => Err(E::custom("invalid float"))
+        }
+    }
+
+    fn visit_str<E: Error>(self, v: &str) -> Result<Self::Value, E> {
+        self.visit_string(v.to_string())
+    }
+
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E> {
+        Ok(ContentValue(Value::String(v)))
+    }
+
+    fn visit_unit<E>(self) -> Result<Self::Value, E> {
+        Ok(ContentValue(Value::Null))
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error> where A: SeqAccess<'de> {
+        // use the size hint, but put a maximum to the allocation because we can't trust the input
+        let mut v = Vec::with_capacity(std::cmp::min(seq.size_hint().unwrap_or(0), MAX_ALLOC));
+
+        while let Some(inner) = seq.next_element()? {
+            v.push(inner);
+        }
+
+        Ok(ContentValue(Value::Array(v)))
+    }
+
+    fn visit_map<A>(mut self, mut map: A) -> Result<Self::Value, A::Error> where A: MapAccess<'de> {
+        // use the size hint, but put a maximum to the allocation because we can't trust the input
+        let mut m = RidiculousStringMap::with_capacity(std::cmp::min(map.size_hint().unwrap_or(0),
+                                                         MAX_ALLOC));
+
+        while let Some((key, val)) = map.next_entry::<String, Value>()? {
+            if self.0 && key == "type" {
+                match val {
+                    Value::String(ref type_str) => {
+                        if check_type_value(type_str) {
+                            self.0 = false;
+                        } else {
+                            return Err(A::Error::custom("content had invalid type"));
+                        }
+                    }
+                    _ => return Err(A::Error::custom("content type must be a string"))
+                }
+
+            }
+
+            if let Some(_) = m.insert(key, val) {
+                return Err(A::Error::custom("map had duplicate key"));
             }
         }
-        _ => {
-            false
-        },
+
+        if self.0 {
+            return Err(A::Error::custom("content had no `type` entry"));
+        }
+
+        Ok(ContentValue(Value::Object(m)))
+    }
+}
+
+/// Check whether the given string is a valid `type` value of a content object.
+fn check_type_value(s: &str) -> bool{
+    let len = legacy_length(s);
+
+    if len < 3 || len > 53 {
+        false
+    } else {
+        true
     }
 }
 
@@ -200,6 +302,21 @@ impl<V> RidiculousStringMap<V> {
     /// which they were inserted.
     pub fn iter(&self) -> Iter<V> {
         Iter { naturals: self.naturals.iter(), others: self.others.iter(), nats: true }
+    }
+}
+
+fn is_nat_str(s: &str) -> bool {
+    match s.as_bytes().split_first() {
+        Some((0x31...0x39, tail)) => {
+            if tail.iter().all(|byte| *byte >= 0x30 && *byte <= 0x39) {
+                true
+            } else {
+                false
+            }
+        }
+        _ => {
+            false
+        },
     }
 }
 
