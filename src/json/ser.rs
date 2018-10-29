@@ -304,7 +304,7 @@ impl<'a, W> Serializer for &'a mut JsonSerializer<W>
             .map_err(EncodeJsonError::Io)
     }
 
-    // Derializing as base64.
+    // Serializing as base64.
     //
     // This not mandated by the spec in any way. From the spec's perspective, this
     // outputs a string like any other.

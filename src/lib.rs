@@ -19,7 +19,7 @@ extern crate base64;
 
 pub mod value;
 pub mod json;
-// pub mod cbor;
+pub mod cbor;
 
 use std::cmp::Ordering;
 use std::fmt;
