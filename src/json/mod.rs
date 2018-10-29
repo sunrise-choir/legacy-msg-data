@@ -9,4 +9,4 @@ mod de;
 mod ser;
 
 pub use self::de::{JsonDeserializer, DecodeJsonError, from_slice, from_slice_partial};
-pub use self::ser::{JsonSerializer, EncodeJsonError, to_writer, to_vec, to_string};
+pub use self::ser::{JsonSerializer, EncodeJsonError, to_writer, to_vec, to_string, to_writer_indent};

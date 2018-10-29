@@ -303,6 +303,16 @@ impl<V> RidiculousStringMap<V> {
     pub fn iter(&self) -> Iter<V> {
         Iter { naturals: self.naturals.iter(), others: self.others.iter(), nats: true }
     }
+
+    /// Returns a reference to the value corresponding to the key.
+    pub fn get(&self, key: &str) -> Option<&V>
+    {
+        if is_nat_str(key) {
+            self.naturals.get(key)
+        } else {
+            self.others.get(key)
+        }
+    }
 }
 
 fn is_nat_str(s: &str) -> bool {

@@ -137,6 +137,19 @@ pub fn to_writer<W, T: ?Sized>(writer: &mut W,
     value.serialize(&mut ser)
 }
 
+/// Serialize the given data structure as JSON into the IO stream.
+pub fn to_writer_indent<W, T: ?Sized>(writer: &mut W,
+                                      value: &T,
+                                      compact: bool,
+                                      indent: usize)
+                                      -> Result<(), EncodeJsonError>
+    where W: io::Write,
+          T: Serialize
+{
+    let mut ser = JsonSerializer::new(writer, compact, indent);
+    value.serialize(&mut ser)
+}
+
 /// Serialize the given data structure  as JSON into a JSON byte vector.
 pub fn to_vec<T: ?Sized>(value: &T, compact: bool) -> Result<Vec<u8>, EncodeJsonError>
     where T: Serialize
@@ -197,9 +210,9 @@ impl<'a, W> Serializer for &'a mut JsonSerializer<W>
 
     fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
         if is_i64_valid(v) {
-            Err(EncodeJsonError::InvalidSignedInteger(v))
-        } else {
             self.serialize_f64(v as f64)
+        } else {
+            Err(EncodeJsonError::InvalidSignedInteger(v))
         }
     }
 
@@ -217,9 +230,9 @@ impl<'a, W> Serializer for &'a mut JsonSerializer<W>
 
     fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
         if is_u64_valid(v) {
-            Err(EncodeJsonError::InvalidUnsignedInteger(v))
-        } else {
             self.serialize_f64(v as f64)
+        } else {
+            Err(EncodeJsonError::InvalidUnsignedInteger(v))
         }
     }
 
