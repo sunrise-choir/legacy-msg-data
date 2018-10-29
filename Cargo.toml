@@ -12,4 +12,3 @@ ryu-ecmascript = "0.1.0"
 # strtod = "0.0.2"
 strtod = { git = "https://github.com/ssbrs/strtod" }
 encode_unicode = "0.3.3"
-failure = "0.1.3"
