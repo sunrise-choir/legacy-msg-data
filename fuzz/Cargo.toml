@@ -28,3 +28,7 @@ path = "fuzz_targets/roundtrip_compact.rs"
 [[bin]]
 name = "roundtrip_cbor"
 path = "fuzz_targets/roundtrip_cbor.rs"
+
+[[bin]]
+name = "bijection"
+path = "fuzz_targets/bijection.rs"
