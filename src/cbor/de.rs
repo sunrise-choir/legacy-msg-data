@@ -12,6 +12,10 @@ pub enum DecodeCborError {
     UnexpectedEndOfInput,
     /// Encountered a major or additional type that is disallowed.
     ForbiddenType,
+    /// A length was encoded with more bytes than necessary
+    NoncanonicLength(u64),
+    /// A string/array/map uses an invalid additional type
+    InvalidAdditionalType,
     /// A number is -0, an infinity or NaN
     InvalidNumber,
     /// The content of a string is not utf8
@@ -145,7 +149,13 @@ impl<'de> CborDeserializer<'de> {
         tag &= 0b000_11111;
         let len = match tag {
             len @ 0...23 => len as u64,
-            24 => self.next()? as u64,
+            24 => {
+                let len = self.next()? as u64;
+                if len < 24 {
+                    return Err(DecodeCborError::NoncanonicLength(len));
+                }
+                len
+            }
             25 => {
                 let mut len = 0;
 
@@ -154,7 +164,11 @@ impl<'de> CborDeserializer<'de> {
                     len |= self.next()? as u64;
                 }
 
-                u64::from_be(len)
+                let len = u64::from_be(len);
+                if len < 256 {
+                    return Err(DecodeCborError::NoncanonicLength(len));
+                }
+                len
             }
             26 => {
                 let mut len = 0;
@@ -164,7 +178,11 @@ impl<'de> CborDeserializer<'de> {
                     len |= self.next()? as u64;
                 }
 
-                u64::from_be(len)
+                let len = u64::from_be(len);
+                if len < 65536 {
+                    return Err(DecodeCborError::NoncanonicLength(len));
+                }
+                len
             }
             27 => {
                 let mut len = 0;
@@ -174,9 +192,13 @@ impl<'de> CborDeserializer<'de> {
                     len |= self.next()? as u64;
                 }
 
-                u64::from_be(len)
+                let len = u64::from_be(len);
+                if len < 4294967296 {
+                    return Err(DecodeCborError::NoncanonicLength(len));
+                }
+                len
             }
-            _ => panic!(),
+            _ => return Err(DecodeCborError::InvalidAdditionalType),
         };
 
         Ok(len as usize)
