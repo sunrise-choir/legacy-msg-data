@@ -758,7 +758,8 @@ mod tests {
     // #[test]
     // fn foo() {
     //     // println!("{:?}", from_slice::<Value>(&[0xa1, 0x61, 0x60]));
-    //     println!("{:?}", from_slice::<Value>(&[0xa1, 0x61, 0x60, 0x60]));
+    //     println!("{:?}",
+    //              from_slice::<Value>(&[0xfb, 0xbe, 0xba, 0x85, 0xfb, 0xbe, 0x2d, 0x2d, 0x32]));
     //     // println!("{:?}", );
     // }
 }
