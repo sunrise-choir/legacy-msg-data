@@ -20,7 +20,7 @@ pub enum DecodeCborError {
     InvalidNumber,
     /// The content of a string is not utf8
     InvalidStringContent,
-    /// A string or collection claims a length longer than the remaining input
+    /// A string claims a length longer than the remaining input
     InvalidLength,
     /// The input contained valid cbor followed by at least one more byte.
     TrailingBytes,
@@ -164,7 +164,6 @@ impl<'de> CborDeserializer<'de> {
                     len |= self.next()? as u64;
                 }
 
-                let len = u64::from_be(len);
                 if len < 256 {
                     return Err(DecodeCborError::NoncanonicLength(len));
                 }
@@ -178,7 +177,6 @@ impl<'de> CborDeserializer<'de> {
                     len |= self.next()? as u64;
                 }
 
-                let len = u64::from_be(len);
                 if len < 65536 {
                     return Err(DecodeCborError::NoncanonicLength(len));
                 }
@@ -192,7 +190,6 @@ impl<'de> CborDeserializer<'de> {
                     len |= self.next()? as u64;
                 }
 
-                let len = u64::from_be(len);
                 if len < 4294967296 {
                     return Err(DecodeCborError::NoncanonicLength(len));
                 }
