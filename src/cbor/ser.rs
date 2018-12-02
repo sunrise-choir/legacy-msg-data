@@ -1,10 +1,11 @@
 use std::{error, fmt, io};
 
-use serde::ser::{self, Serializer, Serialize, SerializeSeq, SerializeStructVariant,
-                 SerializeStruct, SerializeMap, SerializeTupleVariant, SerializeTupleStruct,
-                 SerializeTuple};
+use serde::ser::{
+    self, Serialize, SerializeMap, SerializeSeq, SerializeStruct, SerializeStructVariant,
+    SerializeTuple, SerializeTupleStruct, SerializeTupleVariant, Serializer,
+};
 
-use super::super::{LegacyF64, is_i64_valid, is_u64_valid};
+use super::super::{is_i64_valid, is_u64_valid, LegacyF64};
 
 /// Everything that can go wrong during cbor serialization.
 #[derive(Debug)]
@@ -53,7 +54,8 @@ pub struct CborSerializer<W> {
 }
 
 impl<W> CborSerializer<W>
-    where W: io::Write
+where
+    W: io::Write,
 {
     /// Creates a new serializer.
     pub fn new(writer: W) -> Self {
@@ -116,8 +118,9 @@ enum LenMajor {
 
 /// Serialize the given data structure as cbor into the IO stream.
 pub fn to_writer<W, T: ?Sized>(writer: W, value: &T) -> Result<(), EncodeCborError>
-    where W: io::Write,
-          T: Serialize
+where
+    W: io::Write,
+    T: Serialize,
 {
     let mut ser = CborSerializer::new(writer);
     value.serialize(&mut ser)
@@ -125,14 +128,16 @@ pub fn to_writer<W, T: ?Sized>(writer: W, value: &T) -> Result<(), EncodeCborErr
 
 /// Serialize the given data structure as a cbor byte vector.
 pub fn to_vec<T: ?Sized>(value: &T) -> Result<Vec<u8>, EncodeCborError>
-    where T: Serialize
+where
+    T: Serialize,
 {
     let mut writer = Vec::with_capacity(128);
     to_writer(&mut writer, value).map(|_| writer)
 }
 
 impl<'a, W> Serializer for &'a mut CborSerializer<W>
-    where W: io::Write
+where
+    W: io::Write,
 {
     type Ok = ();
     type Error = EncodeCborError;
@@ -150,8 +155,9 @@ impl<'a, W> Serializer for &'a mut CborSerializer<W>
     }
 
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
-        Ok(self.writer
-               .write_all(if v { &[0b111_10101] } else { &[0b111_10100] })?)
+        Ok(self
+            .writer
+            .write_all(if v { &[0b111_10101] } else { &[0b111_10100] })?)
     }
 
     fn serialize_i8(self, v: i8) -> Result<Self::Ok, Self::Error> {
@@ -233,7 +239,8 @@ impl<'a, W> Serializer for &'a mut CborSerializer<W>
     }
 
     fn serialize_some<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
-        where T: ?Sized + Serialize
+    where
+        T: ?Sized + Serialize,
     {
         value.serialize(self)
     }
@@ -247,31 +254,36 @@ impl<'a, W> Serializer for &'a mut CborSerializer<W>
         self.serialize_unit()
     }
 
-    fn serialize_unit_variant(self,
-                              _name: &'static str,
-                              _variant_index: u32,
-                              variant: &'static str)
-                              -> Result<Self::Ok, Self::Error> {
+    fn serialize_unit_variant(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        variant: &'static str,
+    ) -> Result<Self::Ok, Self::Error> {
         self.serialize_str(variant)
     }
 
-    fn serialize_newtype_struct<T>(self,
-                                   _name: &'static str,
-                                   value: &T)
-                                   -> Result<Self::Ok, Self::Error>
-        where T: ?Sized + Serialize
+    fn serialize_newtype_struct<T>(
+        self,
+        _name: &'static str,
+        value: &T,
+    ) -> Result<Self::Ok, Self::Error>
+    where
+        T: ?Sized + Serialize,
     {
         value.serialize(self)
     }
 
     // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-objects
-    fn serialize_newtype_variant<T: ?Sized>(self,
-                                            _name: &'static str,
-                                            _variant_index: u32,
-                                            variant: &'static str,
-                                            value: &T)
-                                            -> Result<Self::Ok, Self::Error>
-        where T: Serialize
+    fn serialize_newtype_variant<T: ?Sized>(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        variant: &'static str,
+        value: &T,
+    ) -> Result<Self::Ok, Self::Error>
+    where
+        T: Serialize,
     {
         self.write_len(1, LenMajor::Map)?;
         variant.serialize(&mut *self)?;
@@ -293,21 +305,23 @@ impl<'a, W> Serializer for &'a mut CborSerializer<W>
         self.serialize_seq(Some(len))
     }
 
-    fn serialize_tuple_struct(self,
-                              _name: &'static str,
-                              len: usize)
-                              -> Result<Self::SerializeTupleStruct, EncodeCborError> {
+    fn serialize_tuple_struct(
+        self,
+        _name: &'static str,
+        len: usize,
+    ) -> Result<Self::SerializeTupleStruct, EncodeCborError> {
         self.serialize_seq(Some(len))
     }
 
     // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-objects
     // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-arrays
-    fn serialize_tuple_variant(self,
-                               _name: &'static str,
-                               _variant_index: u32,
-                               variant: &'static str,
-                               len: usize)
-                               -> Result<Self::SerializeTupleVariant, EncodeCborError> {
+    fn serialize_tuple_variant(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        variant: &'static str,
+        len: usize,
+    ) -> Result<Self::SerializeTupleVariant, EncodeCborError> {
         self.write_len(1, LenMajor::Map)?;
         variant.serialize(&mut *self)?;
         self.write_len(len, LenMajor::Array)?;
@@ -325,20 +339,22 @@ impl<'a, W> Serializer for &'a mut CborSerializer<W>
         }
     }
 
-    fn serialize_struct(self,
-                        _name: &'static str,
-                        len: usize)
-                        -> Result<Self::SerializeStruct, EncodeCborError> {
+    fn serialize_struct(
+        self,
+        _name: &'static str,
+        len: usize,
+    ) -> Result<Self::SerializeStruct, EncodeCborError> {
         self.serialize_map(Some(len))
     }
 
     // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-objects
-    fn serialize_struct_variant(self,
-                                _name: &'static str,
-                                _variant_index: u32,
-                                variant: &'static str,
-                                len: usize)
-                                -> Result<Self::SerializeStructVariant, EncodeCborError> {
+    fn serialize_struct_variant(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        variant: &'static str,
+        len: usize,
+    ) -> Result<Self::SerializeStructVariant, EncodeCborError> {
         self.write_len(1, LenMajor::Map)?;
         variant.serialize(&mut *self)?;
         self.write_len(len, LenMajor::Map)?;
@@ -358,13 +374,15 @@ impl<'a, W: io::Write> CollectionSerializer<'a, W> {
 }
 
 impl<'a, W> SerializeSeq for CollectionSerializer<'a, W>
-    where W: io::Write
+where
+    W: io::Write,
 {
     type Ok = ();
     type Error = EncodeCborError;
 
     fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
-        where T: Serialize
+    where
+        T: Serialize,
     {
         value.serialize(&mut *self.ser)
     }
@@ -375,13 +393,15 @@ impl<'a, W> SerializeSeq for CollectionSerializer<'a, W>
 }
 
 impl<'a, W> SerializeTuple for CollectionSerializer<'a, W>
-    where W: io::Write
+where
+    W: io::Write,
 {
     type Ok = ();
     type Error = EncodeCborError;
 
     fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
-        where T: Serialize
+    where
+        T: Serialize,
     {
         SerializeSeq::serialize_element(self, value)
     }
@@ -392,13 +412,15 @@ impl<'a, W> SerializeTuple for CollectionSerializer<'a, W>
 }
 
 impl<'a, W> SerializeTupleStruct for CollectionSerializer<'a, W>
-    where W: io::Write
+where
+    W: io::Write,
 {
     type Ok = ();
     type Error = EncodeCborError;
 
     fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
-        where T: Serialize
+    where
+        T: Serialize,
     {
         SerializeSeq::serialize_element(self, value)
     }
@@ -409,13 +431,15 @@ impl<'a, W> SerializeTupleStruct for CollectionSerializer<'a, W>
 }
 
 impl<'a, W> SerializeTupleVariant for CollectionSerializer<'a, W>
-    where W: io::Write
+where
+    W: io::Write,
 {
     type Ok = ();
     type Error = EncodeCborError;
 
     fn serialize_field<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
-        where T: Serialize
+    where
+        T: Serialize,
     {
         SerializeSeq::serialize_element(self, value)
     }
@@ -426,19 +450,22 @@ impl<'a, W> SerializeTupleVariant for CollectionSerializer<'a, W>
 }
 
 impl<'a, W> SerializeMap for CollectionSerializer<'a, W>
-    where W: io::Write
+where
+    W: io::Write,
 {
     type Ok = ();
     type Error = EncodeCborError;
 
     fn serialize_key<T: ?Sized>(&mut self, key: &T) -> Result<(), Self::Error>
-        where T: Serialize
+    where
+        T: Serialize,
     {
         key.serialize(&mut *self.ser)
     }
 
     fn serialize_value<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
-        where T: Serialize
+    where
+        T: Serialize,
     {
         value.serialize(&mut *self.ser)
     }
@@ -449,13 +476,15 @@ impl<'a, W> SerializeMap for CollectionSerializer<'a, W>
 }
 
 impl<'a, W> SerializeStruct for CollectionSerializer<'a, W>
-    where W: io::Write
+where
+    W: io::Write,
 {
     type Ok = ();
     type Error = EncodeCborError;
 
     fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), EncodeCborError>
-        where T: ?Sized + Serialize
+    where
+        T: ?Sized + Serialize,
     {
         SerializeMap::serialize_entry(self, key, value)
     }
@@ -466,13 +495,15 @@ impl<'a, W> SerializeStruct for CollectionSerializer<'a, W>
 }
 
 impl<'a, W> SerializeStructVariant for CollectionSerializer<'a, W>
-    where W: io::Write
+where
+    W: io::Write,
 {
     type Ok = ();
     type Error = EncodeCborError;
 
     fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), EncodeCborError>
-        where T: ?Sized + Serialize
+    where
+        T: ?Sized + Serialize,
     {
         SerializeMap::serialize_entry(self, key, value)
     }

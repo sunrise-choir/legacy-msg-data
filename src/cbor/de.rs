@@ -1,7 +1,9 @@
 use std::{error, fmt};
 
-use serde::de::{self, Deserializer, Deserialize, DeserializeOwned, DeserializeSeed, Visitor,
-                SeqAccess, MapAccess, EnumAccess, VariantAccess, IntoDeserializer};
+use serde::de::{
+    self, Deserialize, DeserializeOwned, DeserializeSeed, Deserializer, EnumAccess,
+    IntoDeserializer, MapAccess, SeqAccess, VariantAccess, Visitor,
+};
 
 use super::super::LegacyF64;
 
@@ -94,7 +96,8 @@ impl<'de> CborDeserializer<'de> {
 
 /// Try to parse data from the input. Validates that there are no trailing bytes.
 pub fn from_slice<'de, T>(input: &'de [u8]) -> Result<T, DecodeCborError>
-    where T: DeserializeOwned
+where
+    T: DeserializeOwned,
 {
     let mut de = CborDeserializer::from_slice(input);
     match Deserialize::deserialize(&mut de) {
@@ -105,7 +108,8 @@ pub fn from_slice<'de, T>(input: &'de [u8]) -> Result<T, DecodeCborError>
 
 /// Try to parse data from the input, returning the remaining input when done.
 pub fn from_slice_partial<'de, T>(input: &'de [u8]) -> Result<(T, &'de [u8]), DecodeCborError>
-    where T: DeserializeOwned
+where
+    T: DeserializeOwned,
 {
     let mut de = CborDeserializer::from_slice(input);
     match Deserialize::deserialize(&mut de) {
@@ -279,7 +283,8 @@ impl<'de, 'a> Deserializer<'de> for &'a mut CborDeserializer<'de> {
     type Error = DecodeCborError;
 
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         match self.peek()? {
             0b111_10100 => {
@@ -303,13 +308,15 @@ impl<'de, 'a> Deserializer<'de> for &'a mut CborDeserializer<'de> {
     }
 
     fn deserialize_bool<V>(self, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         visitor.visit_bool(self.parse_bool()?)
     }
 
     fn deserialize_i8<V>(self, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         let f = self.parse_number()?;
         if f < std::i8::MIN as f64 || f > std::i8::MAX as f64 {
@@ -320,7 +327,8 @@ impl<'de, 'a> Deserializer<'de> for &'a mut CborDeserializer<'de> {
     }
 
     fn deserialize_i16<V>(self, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         let f = self.parse_number()?;
         if f < std::i16::MIN as f64 || f > std::i16::MAX as f64 {
@@ -331,7 +339,8 @@ impl<'de, 'a> Deserializer<'de> for &'a mut CborDeserializer<'de> {
     }
 
     fn deserialize_i32<V>(self, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         let f = self.parse_number()?;
         if f < std::i32::MIN as f64 || f > std::i32::MAX as f64 {
@@ -342,7 +351,8 @@ impl<'de, 'a> Deserializer<'de> for &'a mut CborDeserializer<'de> {
     }
 
     fn deserialize_i64<V>(self, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         let f = self.parse_number()?;
         if f < -9007199254740992.0f64 || f > 9007199254740992.0f64 {
@@ -353,7 +363,8 @@ impl<'de, 'a> Deserializer<'de> for &'a mut CborDeserializer<'de> {
     }
 
     fn deserialize_u8<V>(self, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         let f = self.parse_number()?;
         if f > std::u8::MAX as f64 {
@@ -364,7 +375,8 @@ impl<'de, 'a> Deserializer<'de> for &'a mut CborDeserializer<'de> {
     }
 
     fn deserialize_u16<V>(self, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         let f = self.parse_number()?;
         if f > std::u16::MAX as f64 {
@@ -375,7 +387,8 @@ impl<'de, 'a> Deserializer<'de> for &'a mut CborDeserializer<'de> {
     }
 
     fn deserialize_u32<V>(self, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         let f = self.parse_number()?;
         if f > std::u32::MAX as f64 {
@@ -386,7 +399,8 @@ impl<'de, 'a> Deserializer<'de> for &'a mut CborDeserializer<'de> {
     }
 
     fn deserialize_u64<V>(self, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         let f = self.parse_number()?;
         if f > 9007199254740992.0f64 {
@@ -397,48 +411,52 @@ impl<'de, 'a> Deserializer<'de> for &'a mut CborDeserializer<'de> {
     }
 
     fn deserialize_f32<V>(self, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         visitor.visit_f32(self.parse_number()? as f32)
     }
 
     fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         visitor.visit_f64(self.parse_number()?)
     }
 
     fn deserialize_char<V>(self, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         let s = self.parse_string()?;
         let mut chars = s.chars();
 
         match chars.next() {
             None => return Err(DecodeCborError::NotAChar),
-            Some(c) => {
-                match chars.next() {
-                    None => return visitor.visit_char(c),
-                    Some(_) => return Err(DecodeCborError::NotAChar),
-                }
-            }
+            Some(c) => match chars.next() {
+                None => return visitor.visit_char(c),
+                Some(_) => return Err(DecodeCborError::NotAChar),
+            },
         }
     }
 
     fn deserialize_str<V>(self, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         visitor.visit_str(self.parse_str()?)
     }
 
     fn deserialize_string<V>(self, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         visitor.visit_string(self.parse_string()?)
     }
 
     fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         // We can't reference bytes directly since they are stored as base64 strings.
         // For the conversion, we need to allocate an owned buffer, so always do owned
@@ -447,7 +465,8 @@ impl<'de, 'a> Deserializer<'de> for &'a mut CborDeserializer<'de> {
     }
 
     fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         match base64::decode(self.parse_str()?) {
             Ok(buf) => visitor.visit_byte_buf(buf),
@@ -456,7 +475,8 @@ impl<'de, 'a> Deserializer<'de> for &'a mut CborDeserializer<'de> {
     }
 
     fn deserialize_option<V>(self, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         if self.input.starts_with(&[0b111_10110]) {
             self.input = &self.input[1..];
@@ -467,32 +487,38 @@ impl<'de, 'a> Deserializer<'de> for &'a mut CborDeserializer<'de> {
     }
 
     fn deserialize_unit<V>(self, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         self.parse_null()?;
         visitor.visit_unit()
     }
 
-    fn deserialize_unit_struct<V>(self,
-                                  _name: &'static str,
-                                  visitor: V)
-                                  -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    fn deserialize_unit_struct<V>(
+        self,
+        _name: &'static str,
+        visitor: V,
+    ) -> Result<V::Value, DecodeCborError>
+    where
+        V: Visitor<'de>,
     {
         self.deserialize_unit(visitor)
     }
 
-    fn deserialize_newtype_struct<V>(self,
-                                     _name: &'static str,
-                                     visitor: V)
-                                     -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    fn deserialize_newtype_struct<V>(
+        self,
+        _name: &'static str,
+        visitor: V,
+    ) -> Result<V::Value, DecodeCborError>
+    where
+        V: Visitor<'de>,
     {
         visitor.visit_newtype_struct(self)
     }
 
     fn deserialize_seq<V>(mut self, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         let tag = self.next()?;
         if tag < 0b100_00000 || tag > 0b100_11011 {
@@ -504,23 +530,27 @@ impl<'de, 'a> Deserializer<'de> for &'a mut CborDeserializer<'de> {
     }
 
     fn deserialize_tuple<V>(self, _len: usize, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         self.deserialize_seq(visitor)
     }
 
-    fn deserialize_tuple_struct<V>(self,
-                                   _name: &'static str,
-                                   _len: usize,
-                                   visitor: V)
-                                   -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    fn deserialize_tuple_struct<V>(
+        self,
+        _name: &'static str,
+        _len: usize,
+        visitor: V,
+    ) -> Result<V::Value, DecodeCborError>
+    where
+        V: Visitor<'de>,
     {
         self.deserialize_seq(visitor)
     }
 
     fn deserialize_map<V>(mut self, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         let tag = self.next()?;
         if tag < 0b101_00000 || tag > 0b101_11011 {
@@ -531,22 +561,26 @@ impl<'de, 'a> Deserializer<'de> for &'a mut CborDeserializer<'de> {
         visitor.visit_map(CollectionAccessor::new(&mut self, len))
     }
 
-    fn deserialize_struct<V>(self,
-                             _name: &'static str,
-                             _fields: &'static [&'static str],
-                             visitor: V)
-                             -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    fn deserialize_struct<V>(
+        self,
+        _name: &'static str,
+        _fields: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, DecodeCborError>
+    where
+        V: Visitor<'de>,
     {
         self.deserialize_map(visitor)
     }
 
-    fn deserialize_enum<V>(self,
-                           _name: &'static str,
-                           _variants: &'static [&'static str],
-                           visitor: V)
-                           -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    fn deserialize_enum<V>(
+        self,
+        _name: &'static str,
+        _variants: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, DecodeCborError>
+    where
+        V: Visitor<'de>,
     {
         let tag = self.peek()?;
         if tag > 0b011_00000 && tag < 0b011_11011 {
@@ -560,13 +594,15 @@ impl<'de, 'a> Deserializer<'de> for &'a mut CborDeserializer<'de> {
     }
 
     fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         self.deserialize_str(visitor)
     }
 
     fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         self.deserialize_any(visitor)
     }
@@ -587,7 +623,8 @@ impl<'de, 'a> SeqAccess<'de> for CollectionAccessor<'de, 'a> {
     type Error = DecodeCborError;
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, DecodeCborError>
-        where T: DeserializeSeed<'de>
+    where
+        T: DeserializeSeed<'de>,
     {
         if self.len == 0 {
             return Ok(None);
@@ -606,7 +643,8 @@ impl<'de, 'a> MapAccess<'de> for CollectionAccessor<'de, 'a> {
     type Error = DecodeCborError;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, DecodeCborError>
-        where K: DeserializeSeed<'de>
+    where
+        K: DeserializeSeed<'de>,
     {
         if self.len == 0 {
             return Ok(None);
@@ -618,7 +656,8 @@ impl<'de, 'a> MapAccess<'de> for CollectionAccessor<'de, 'a> {
     }
 
     fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value, DecodeCborError>
-        where V: DeserializeSeed<'de>
+    where
+        V: DeserializeSeed<'de>,
     {
         seed.deserialize(&mut *self.des)
     }
@@ -643,7 +682,8 @@ impl<'de, 'a> EnumAccess<'de> for Enum<'a, 'de> {
     type Variant = Self;
 
     fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self::Variant), DecodeCborError>
-        where V: DeserializeSeed<'de>
+    where
+        V: DeserializeSeed<'de>,
     {
         let val = seed.deserialize(&mut *self.des)?;
         Ok((val, self))
@@ -658,24 +698,28 @@ impl<'de, 'a> VariantAccess<'de> for Enum<'a, 'de> {
     }
 
     fn newtype_variant_seed<T>(self, seed: T) -> Result<T::Value, DecodeCborError>
-        where T: DeserializeSeed<'de>
+    where
+        T: DeserializeSeed<'de>,
     {
         seed.deserialize(self.des)
     }
 
     fn tuple_variant<V>(self, _len: usize, visitor: V) -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    where
+        V: Visitor<'de>,
     {
         Deserializer::deserialize_seq(self.des, visitor)
     }
 
     // Struct variants are represented in JSON as `{ NAME: { K: V, ... } }` so
     // deserialize the inner map here.
-    fn struct_variant<V>(self,
-                         _fields: &'static [&'static str],
-                         visitor: V)
-                         -> Result<V::Value, DecodeCborError>
-        where V: Visitor<'de>
+    fn struct_variant<V>(
+        self,
+        _fields: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, DecodeCborError>
+    where
+        V: Visitor<'de>,
     {
         Deserializer::deserialize_map(self.des, visitor)
     }
@@ -683,9 +727,9 @@ impl<'de, 'a> VariantAccess<'de> for Enum<'a, 'de> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{from_slice, to_vec};
     use super::super::super::value::Value;
     use super::super::super::LegacyF64;
+    use super::super::{from_slice, to_vec};
 
     use std::collections::HashMap;
     use std::iter::repeat;
@@ -709,32 +753,46 @@ mod tests {
         assert_eq!(from_slice::<Value>(&[0xf4]).unwrap(), Value::Bool(false));
         assert_eq!(from_slice::<Value>(&[0xf5]).unwrap(), Value::Bool(true));
         assert_eq!(from_slice::<Value>(&[0xf6]).unwrap(), Value::Null);
-        assert_eq!(from_slice::<Value>(&[0xfb, 0x3f, 0xf1, 0x99, 0x99, 0x99, 0x99, 0x99, 0x9a])
-                       .unwrap(),
-                   Value::Float(LegacyF64::from_f64(1.1).unwrap()));
+        assert_eq!(
+            from_slice::<Value>(&[0xfb, 0x3f, 0xf1, 0x99, 0x99, 0x99, 0x99, 0x99, 0x9a]).unwrap(),
+            Value::Float(LegacyF64::from_f64(1.1).unwrap())
+        );
         assert!(from_slice::<Value>(&[0xf7]).is_err()); // undefined
-        assert!(from_slice::<Value>(&[0xfb, 0x7f, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
-                    .is_err()); // Infinity
-        assert!(from_slice::<Value>(&[0xfb, 0x7f, 0xf8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
-                    .is_err()); // NaN
-        assert!(from_slice::<Value>(&[0xfb, 0xff, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
-                    .is_err()); // -Infinity
-        assert!(from_slice::<Value>(&[0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
-                    .is_err()); // -0.0
+        assert!(
+            from_slice::<Value>(&[0xfb, 0x7f, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]).is_err()
+        ); // Infinity
+        assert!(
+            from_slice::<Value>(&[0xfb, 0x7f, 0xf8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]).is_err()
+        ); // NaN
+        assert!(
+            from_slice::<Value>(&[0xfb, 0xff, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]).is_err()
+        ); // -Infinity
+        assert!(
+            from_slice::<Value>(&[0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]).is_err()
+        ); // -0.0
         assert!(from_slice::<Value>(&[0xf0]).is_err()); // simple(16)
         assert!(from_slice::<Value>(&[0x40]).is_err()); // h''
-        assert_eq!(from_slice::<Value>(&[0x60]).unwrap(),
-                   Value::String("".to_string()));
-        assert_eq!(from_slice::<Value>(&[0x61, 0x61]).unwrap(),
-                   Value::String("a".to_string()));
+        assert_eq!(
+            from_slice::<Value>(&[0x60]).unwrap(),
+            Value::String("".to_string())
+        );
+        assert_eq!(
+            from_slice::<Value>(&[0x61, 0x61]).unwrap(),
+            Value::String("a".to_string())
+        );
         assert_eq!(from_slice::<Value>(&[0x80]).unwrap(), Value::Array(vec![]));
-        assert_eq!(from_slice::<Value>(&[0x83, 0xf6, 0xf6, 0xf6]).unwrap(),
-                   Value::Array(vec![Value::Null, Value::Null, Value::Null]));
-        assert_eq!(from_slice::<Value>(&[0x98, 0x19, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6,
-                                         0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6,
-                                         0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6])
-                           .unwrap(),
-                   Value::Array(repeat_n(Value::Null, 25)));
+        assert_eq!(
+            from_slice::<Value>(&[0x83, 0xf6, 0xf6, 0xf6]).unwrap(),
+            Value::Array(vec![Value::Null, Value::Null, Value::Null])
+        );
+        assert_eq!(
+            from_slice::<Value>(&[
+                0x98, 0x19, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6,
+                0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6, 0xf6
+            ])
+            .unwrap(),
+            Value::Array(repeat_n(Value::Null, 25))
+        );
         // assert_eq!(from_slice::<Value>(&[0xa0]).unwrap(),
         //            Value::Object(HashMap::new()));
         // assert!(from_slice::<Value>(&[0xa1, 0xf6, 0xf6]).is_err()); // {null: null}
@@ -748,8 +806,9 @@ mod tests {
         //                .unwrap(),
         //            Value::Object(foo));
 
-        assert!(from_slice::<Value>(&[0xa2, 0x61, 0x61, 0xf6, 0x61, 0x61, 0x82, 0xf6, 0xf6])
-                    .is_err()); // {"a": null, "a": [null, null]}
+        assert!(
+            from_slice::<Value>(&[0xa2, 0x61, 0x61, 0xf6, 0x61, 0x61, 0x82, 0xf6, 0xf6]).is_err()
+        ); // {"a": null, "a": [null, null]}
     }
 
     // #[test]

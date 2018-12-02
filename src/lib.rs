@@ -8,18 +8,18 @@
 //! and the [cbor encoding](TODO).
 #![warn(missing_docs)]
 
+extern crate encode_unicode;
 extern crate indexmap;
 extern crate ryu_ecmascript;
-extern crate strtod;
-extern crate encode_unicode;
 extern crate serde;
+extern crate strtod;
 #[macro_use]
 extern crate serde_derive;
 extern crate base64;
 
-pub mod value;
-pub mod json;
 pub mod cbor;
+pub mod json;
+pub mod value;
 
 use std::cmp::Ordering;
 use std::fmt;
