@@ -285,14 +285,10 @@ impl<V> RidiculousStringMap<V> {
     /// value is returned. The key is not updated, though; this matters for
     /// types that can be `==` without being identical.
     pub fn insert(&mut self, key: String, val: V) -> Option<V> {
-        if key == "0" {
+        if is_int_str(&key) {
             self.naturals.insert(GraphicolexicalString(key), val)
         } else {
-            if is_int_str(&key) {
-                self.naturals.insert(GraphicolexicalString(key), val)
-            } else {
-                self.others.insert(key, val)
-            }
+            self.others.insert(key, val)
         }
     }
 
@@ -316,6 +312,10 @@ impl<V> RidiculousStringMap<V> {
 }
 
 fn is_int_str(s: &str) -> bool {
+    if s == "0" {
+        return true;
+    }
+
     match s.as_bytes().split_first() {
         Some((0x31...0x39, tail)) => {
             if tail.iter().all(|byte| *byte >= 0x30 && *byte <= 0x39) {
@@ -323,7 +323,7 @@ fn is_int_str(s: &str) -> bool {
                     return false;
                 }
 
-                u64::from_str_radix(unsafe { std::str::from_utf8_unchecked(tail) }, 10).unwrap() < (std::u32::MAX as u64) - 1
+                u64::from_str_radix(s, 10).unwrap() < (std::u32::MAX as u64)
             } else {
                 false
             }
@@ -332,6 +332,22 @@ fn is_int_str(s: &str) -> bool {
             false
         },
     }
+}
+
+#[test]
+fn test_is_int_str() {
+    assert!(is_int_str("0"));
+    assert!(!is_int_str("01"));
+    assert!(!is_int_str("00"));
+    assert!(is_int_str("5"));
+    assert!(is_int_str("4294967294"));
+    assert!(!is_int_str("4294967295"));
+    assert!(!is_int_str("4294967296"));
+    assert!(!is_int_str("4294967297"));
+    assert!(!is_int_str("42949672930"));
+    assert!(!is_int_str("42949672940"));
+    assert!(is_int_str("429496729"));
+    assert!(!is_int_str("52949672940"));
 }
 
 impl<'a, V> IntoIterator for &'a RidiculousStringMap<V> {
