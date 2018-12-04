@@ -251,10 +251,10 @@ fn check_type_value(s: &str) -> bool{
 
 /// A map with string keys that sorts strings according to
 /// [object entry order](https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-objects),
-/// using insertion order for non-numeric keys.
+/// using insertion order for non-int keys.
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub struct RidiculousStringMap<V> {
-    // Keys that parse as natural numbers, sorted numerically.
+    // Keys that parse as natural numbers strictly less than 2^32 - 1, sorted numerically.
     naturals: BTreeMap<GraphicolexicalString, V>,
     // The remaining keys, sorted in insertion order.
     others: IndexMap<String, V>,
@@ -288,7 +288,7 @@ impl<V> RidiculousStringMap<V> {
         if key == "0" {
             self.naturals.insert(GraphicolexicalString(key), val)
         } else {
-            if is_nat_str(&key) {
+            if is_int_str(&key) {
                 self.naturals.insert(GraphicolexicalString(key), val)
             } else {
                 self.others.insert(key, val)
@@ -307,7 +307,7 @@ impl<V> RidiculousStringMap<V> {
     /// Returns a reference to the value corresponding to the key.
     pub fn get(&self, key: &str) -> Option<&V>
     {
-        if is_nat_str(key) {
+        if is_int_str(key) {
             self.naturals.get(key)
         } else {
             self.others.get(key)
@@ -315,11 +315,15 @@ impl<V> RidiculousStringMap<V> {
     }
 }
 
-fn is_nat_str(s: &str) -> bool {
+fn is_int_str(s: &str) -> bool {
     match s.as_bytes().split_first() {
         Some((0x31...0x39, tail)) => {
             if tail.iter().all(|byte| *byte >= 0x30 && *byte <= 0x39) {
-                true
+                if tail.len() >= 10 {
+                    return false;
+                }
+
+                u64::from_str_radix(unsafe { std::str::from_utf8_unchecked(tail) }, 10).unwrap() < (std::u32::MAX as u64) - 1
             } else {
                 false
             }
