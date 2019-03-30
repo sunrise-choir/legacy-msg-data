@@ -2,10 +2,9 @@
 //! [legacy data format](https://spec.scuttlebutt.nz/datamodel.html),
 //! i.e. the free-form data that forms the content of legacy messages.
 //!
-//! Three encodings are implemented: the
-//! [signing encoding](https://spec.scuttlebutt.nz/datamodel.html#signing-encoding), the
-//! [json transport encoding](https://spec.scuttlebutt.nz/datamodel.html#json-transport-encoding),
-//! and the [cbor encoding](TODO).
+//! Two encodings are implemented: the
+//! [signing encoding](https://spec.scuttlebutt.nz/datamodel.html#signing-encoding), and the
+//! [json transport encoding](https://spec.scuttlebutt.nz/datamodel.html#json-transport-encoding).
 #![warn(missing_docs)]
 
 extern crate indexmap;
@@ -19,7 +18,6 @@ extern crate base64;
 
 pub mod value;
 pub mod json;
-pub mod cbor;
 
 use std::cmp::Ordering;
 use std::fmt;
