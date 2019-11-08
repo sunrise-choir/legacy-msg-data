@@ -292,6 +292,16 @@ impl<V> RidiculousStringMap<V> {
         }
     }
 
+    /// Deletes a key-value pair from the map.
+    ///
+    pub fn remove(&mut self, key: String) -> Option<V> {
+        if is_int_str(&key) {
+            self.naturals.remove(&GraphicolexicalString(key))
+        } else {
+            self.others.remove(&key)
+        }
+    }
+
     /// Gets an iterator over the entries of the map. It first yields all entries with
     /// [numeric](https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-objects) keys
     /// in ascending order, and then the remaining entries in the same order in
@@ -307,6 +317,15 @@ impl<V> RidiculousStringMap<V> {
             self.naturals.get(key)
         } else {
             self.others.get(key)
+        }
+    }
+    /// Returns a reference to the value corresponding to the key.
+    pub fn get_mut(&mut self, key: &str) -> Option<&mut V>
+    {
+        if is_int_str(key) {
+            self.naturals.get_mut(key)
+        } else {
+            self.others.get_mut(key)
         }
     }
 }
