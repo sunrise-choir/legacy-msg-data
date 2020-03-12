@@ -11,9 +11,13 @@ use strtod::strtod;
 
 use super::super::LegacyF64;
 
+/// Error code and byte offset describing a deserialization failure
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct DecodeJsonError {
+    /// Reason decoding failed
     pub code: ErrorCode,
+
+    /// Byte offset at which the decoding failure occurred
     pub position: usize,
 }
 
@@ -130,10 +134,12 @@ impl<'de> JsonDeserializer<'de> {
         &self.input[i]
     }
 
+    /// Reference to portion of buffer yet to be deserialiced
     pub fn rest(&self) -> &'de [u8] {
         self.slice(self.position()..)
     }
 
+    /// Current byte offset of buffer being deserialized
     pub fn position(&self) -> usize {
         self.position
     }
@@ -335,7 +341,7 @@ impl<'de> JsonDeserializer<'de> {
             // first digit `0` must be followed by `.`
             0x30 => {}
             // first digit nonzero, may be followed by more digits until the `.`
-            0x31...0x39 => self.skip(is_digit),
+            0x31..=0x39 => self.skip(is_digit),
             _ => return self.fail_at_position(ErrorCode::ExpectedNumber, start),
         }
 
@@ -453,7 +459,7 @@ impl<'de> JsonDeserializer<'de> {
                 }
 
                 // the control code points must be escaped
-                0x00...0x1F => return self.fail(ErrorCode::UnescapedControlCodePoint),
+                0x00..=0x1F => return self.fail(ErrorCode::UnescapedControlCodePoint),
 
                 // a regular utf8-encoded code point (unless it is malformed)
                 _ => match Utf8Char::from_slice_start(self.rest()) {
@@ -486,9 +492,9 @@ enum CodeUnitType {
 // Maps a `u16` to its `CodeUnitType`.
 fn code_unit_type(c: u16) -> CodeUnitType {
     match c {
-        0x0000...0xD7FF | 0xE000...0xFFFF => CodeUnitType::Valid,
-        0xD800...0xDBFF => CodeUnitType::LeadingSurrogate,
-        0xDC00...0xDFFF => CodeUnitType::TrailingSurrogate,
+        0x0000..=0xD7FF | 0xE000..=0xFFFF => CodeUnitType::Valid,
+        0xD800..=0xDBFF => CodeUnitType::LeadingSurrogate,
+        0xDC00..=0xDFFF => CodeUnitType::TrailingSurrogate,
     }
 }
 
@@ -527,7 +533,7 @@ impl<'a, 'de> Deserializer<'de> for &'a mut JsonDeserializer<'de> {
             0x22 => self.deserialize_str(visitor),
             0x5B => self.deserialize_seq(visitor),
             0x7B => self.deserialize_map(visitor),
-            0x2D | 0x30...0x39 => self.deserialize_f64(visitor),
+            0x2D | 0x30..=0x39 => self.deserialize_f64(visitor),
             _ => self.fail(ErrorCode::Syntax),
         }
     }
