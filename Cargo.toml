@@ -2,6 +2,13 @@
 name = "ssb-json-msg-data"
 version = "0.1.2"
 authors = ["AljoschaMeyer <mail@aljoscha-meyer.de>"]
+edition = "2018"
+license = "AGPL-3.0"
+description = "JSON de/serialization matching v8 (nodejs) behavior"
+repository = "https://github.com/sunrise-choir/legacy-msg-data"
+documentation = "https://docs.rs/ssb-json-msg-data/"
+readme = "README.md"
+keywords = ["json", "ssb", "scuttlebutt"]
 
 [dependencies]
 serde = "1.0.92"
