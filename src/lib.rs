@@ -9,9 +9,9 @@
 
 extern crate encode_unicode;
 extern crate indexmap;
+extern crate lexical_core;
 extern crate ryu_ecmascript;
 extern crate serde;
-extern crate strtod;
 #[macro_use]
 extern crate serde_derive;
 extern crate base64;

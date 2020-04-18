@@ -3,11 +3,11 @@ use std::{error, fmt};
 
 use base64;
 use encode_unicode::{error::InvalidUtf16Tuple, Utf16Char, Utf8Char};
+use lexical_core;
 use serde::de::{
     self, Deserialize, DeserializeOwned, DeserializeSeed, Deserializer, EnumAccess,
     IntoDeserializer, MapAccess, SeqAccess, VariantAccess, Visitor,
 };
-use strtod::strtod;
 
 use super::super::LegacyF64;
 
@@ -370,9 +370,7 @@ impl<'de> JsonDeserializer<'de> {
         }
 
         // done parsing the number, convert it to a rust value
-        let f =
-            strtod(unsafe { std::str::from_utf8_unchecked(self.slice(start..self.position())) })
-                .unwrap(); // We already checked that the input is a valid number
+        let f: f64 = lexical_core::parse(self.slice(start..self.position())).unwrap(); // We already checked that the input is a valid number
 
         if LegacyF64::is_valid(f) {
             Ok(f)
