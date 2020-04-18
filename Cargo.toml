@@ -1,12 +1,12 @@
 [package]
-name = "ssb-legacy-msg-data"
-version = "0.1.1"
+name = "ssb-json-msg-data"
+version = "0.1.2"
 authors = ["AljoschaMeyer <mail@aljoscha-meyer.de>"]
 
 [dependencies]
 serde = "1.0.92"
 serde_derive = "1.0.92"
-base64 = "0.10.1"
+base64 = "0.12.0"
 indexmap = "1.0.2"
 lexical-core = "0.7.4"
 ryu-ecmascript = "0.1.1"

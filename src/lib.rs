@@ -36,7 +36,7 @@ impl LegacyF64 {
     /// Safe conversion of an arbitrary `f64` into a `LegacyF64`.
     ///
     /// ```
-    /// use ssb_legacy_msg_data::LegacyF64;
+    /// use ssb_json_msg_data::LegacyF64;
     ///
     /// assert!(LegacyF64::from_f64(0.0).is_some());
     /// assert!(LegacyF64::from_f64(-1.1).is_some());
@@ -64,7 +64,7 @@ impl LegacyF64 {
     /// behavior.
     ///
     /// ```
-    /// use ssb_legacy_msg_data::LegacyF64;
+    /// use ssb_json_msg_data::LegacyF64;
     ///
     /// let fine = unsafe { LegacyF64::from_f64_unchecked(1.1) };
     ///
