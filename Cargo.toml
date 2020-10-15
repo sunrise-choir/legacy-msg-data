@@ -9,6 +9,5 @@ serde_derive = "1.0.92"
 base64 = "0.10.1"
 indexmap = "1.0.2"
 ryu-ecmascript = "0.1.1"
-# strtod = "0.0.2"
-strtod = { git = "https://github.com/ssbrs/strtod" }
+strtod2 = "0.0.1"
 encode_unicode = "0.3.5"

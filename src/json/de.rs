@@ -7,7 +7,7 @@ use serde::de::{
     self, Deserialize, DeserializeOwned, DeserializeSeed, Deserializer, EnumAccess,
     IntoDeserializer, MapAccess, SeqAccess, VariantAccess, Visitor,
 };
-use strtod::strtod;
+use strtod2::strtod;
 
 use super::super::LegacyF64;
 
