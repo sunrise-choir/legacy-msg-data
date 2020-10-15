@@ -1,7 +1,9 @@
 [package]
 name = "ssb-legacy-msg-data"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["AljoschaMeyer <mail@aljoscha-meyer.de>"]
+license = "AGPL-3.0"
+description = "Rust implementation of the [ssb legacy data format](https://spec.scuttlebutt.nz/feed/datamodel.html)."
 
 [dependencies]
 serde = "1.0.92"
