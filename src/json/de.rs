@@ -394,7 +394,7 @@ impl<'de> JsonDeserializer<'de> {
     }
 
     fn parse_string(&mut self) -> Result<String, DecodeJsonError> {
-        self.expect(0x22, ErrorCode::ExpectedString).unwrap();
+        self.expect(0x22, ErrorCode::ExpectedString)?;
 
         let mut decoded = String::new();
 
