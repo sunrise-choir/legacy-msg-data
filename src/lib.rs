@@ -29,7 +29,7 @@ use std::fmt;
 /// can not.
 ///
 /// To obtain the inner value, use the `From<LegacyF64> for f64` impl.
-#[derive(Clone, Copy, PartialEq, PartialOrd, Default, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub struct LegacyF64(f64);
 
 impl LegacyF64 {
@@ -107,6 +107,12 @@ impl Ord for LegacyF64 {
     }
 }
 
+impl PartialOrd for LegacyF64 {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl From<LegacyF64> for f64 {
     fn from(f: LegacyF64) -> Self {
         f.0
@@ -149,7 +155,7 @@ impl<'a> Iterator for WeirdEncodingIterator<'a> {
 /// iterator coincides with the
 /// [length](https://spec.scuttlebutt.nz/datamodel.html#legacy-length-computation)
 /// of the data.
-pub fn to_weird_encoding<'a>(s: &'a str) -> WeirdEncodingIterator<'a> {
+pub fn to_weird_encoding(s: &str) -> WeirdEncodingIterator {
     WeirdEncodingIterator(s.encode_utf16().map(|x| x as u8))
 }
 
