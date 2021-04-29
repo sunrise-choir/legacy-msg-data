@@ -160,7 +160,9 @@ impl<'de> Deserialize<'de> for ContentValue {
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_map(ContentValueVisitor::new())
+        // allowable types include String and Map so we let the input determine the applicable
+        // deserialization method to use
+        deserializer.deserialize_any(ContentValueVisitor::new())
     }
 }
 
@@ -176,44 +178,20 @@ impl<'de> Visitor<'de> for ContentValueVisitor {
     type Value = ContentValue;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("any valid legacy ssb content value")
-    }
-
-    fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E> {
-        Ok(ContentValue(Value::Bool(v)))
-    }
-
-    fn visit_f64<E: Error>(self, v: f64) -> Result<Self::Value, E> {
-        match LegacyF64::from_f64(v) {
-            Some(f) => Ok(ContentValue(Value::Float(f))),
-            None => Err(E::custom("invalid float")),
-        }
+        formatter.write_str("a string or map of valid legacy ssb values")
     }
 
     fn visit_str<E: Error>(self, v: &str) -> Result<Self::Value, E> {
         self.visit_string(v.to_string())
     }
 
-    fn visit_string<E>(self, v: String) -> Result<Self::Value, E> {
-        Ok(ContentValue(Value::String(v)))
-    }
-
-    fn visit_unit<E>(self) -> Result<Self::Value, E> {
-        Ok(ContentValue(Value::Null))
-    }
-
-    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-    where
-        A: SeqAccess<'de>,
-    {
-        // use the size hint, but put a maximum to the allocation because we can't trust the input
-        let mut v = Vec::with_capacity(std::cmp::min(seq.size_hint().unwrap_or(0), MAX_ALLOC));
-
-        while let Some(inner) = seq.next_element()? {
-            v.push(inner);
+    fn visit_string<E: Error>(self, v: String) -> Result<Self::Value, E> {
+        // check whether the given string represents an encoded private message
+        if v.contains(".box") {
+            Ok(ContentValue(Value::String(v)))
+        } else {
+            Err(E::custom("content string must contain `.box`"))
         }
-
-        Ok(ContentValue(Value::Array(v)))
     }
 
     fn visit_map<A>(mut self, mut map: A) -> Result<Self::Value, A::Error>
@@ -257,7 +235,7 @@ impl<'de> Visitor<'de> for ContentValueVisitor {
 fn check_type_value(s: &str) -> bool {
     let len = legacy_length(s);
 
-    !(3..=53).contains(&len)
+    (3..=52).contains(&len)
 }
 
 /// A map with string keys that sorts strings according to
