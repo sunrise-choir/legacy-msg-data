@@ -186,12 +186,7 @@ impl<'de> Visitor<'de> for ContentValueVisitor {
     }
 
     fn visit_string<E: Error>(self, v: String) -> Result<Self::Value, E> {
-        // check whether the given string represents an encoded private message
-        if v.contains(".box") {
-            Ok(ContentValue(Value::String(v)))
-        } else {
-            Err(E::custom("content string must contain `.box`"))
-        }
+        Ok(ContentValue(Value::String(v)))
     }
 
     fn visit_map<A>(mut self, mut map: A) -> Result<Self::Value, A::Error>
