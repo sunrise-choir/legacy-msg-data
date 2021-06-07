@@ -157,7 +157,7 @@ impl<'de> JsonDeserializer<'de> {
 }
 
 /// Try to parse data from the input. Validates that there are no trailing non-whitespace bytes.
-pub fn from_slice<'de, T>(input: &'de [u8]) -> Result<T, DecodeJsonError>
+pub fn from_slice<T>(input: &[u8]) -> Result<T, DecodeJsonError>
 where
     T: DeserializeOwned,
 {
@@ -169,7 +169,7 @@ where
 }
 
 /// Try to parse data from the input, returning the remaining input when done.
-pub fn from_slice_partial<'de, T>(input: &'de [u8]) -> Result<(T, &'de [u8]), DecodeJsonError>
+pub fn from_slice_partial<T>(input: &[u8]) -> Result<(T, &[u8]), DecodeJsonError>
 where
     T: DeserializeOwned,
 {
@@ -244,11 +244,11 @@ impl<'de> JsonDeserializer<'de> {
 
     // Returns the next byte without consuming it, or signals end of input as `None`.
     fn peek_or_end(&self) -> Option<u8> {
-        self.input.get(self.position()).map(|b| *b)
+        self.input.get(self.position()).copied()
     }
 
     // Skips values while the predicate returns true.
-    fn skip(&mut self, pred: fn(u8) -> bool) -> () {
+    fn skip(&mut self, pred: fn(u8) -> bool) {
         loop {
             match self.peek_or_end() {
                 None => return,
@@ -263,7 +263,7 @@ impl<'de> JsonDeserializer<'de> {
         }
     }
 
-    fn skip_ws(&mut self) -> () {
+    fn skip_ws(&mut self) {
         self.skip(is_ws)
     }
 
@@ -413,14 +413,14 @@ impl<'de> JsonDeserializer<'de> {
 
                     match self.next()? {
                         // single character escape sequences
-                        0x22 => decoded.push_str("\u{22}"), // `\"`
-                        0x5C => decoded.push_str("\u{5C}"), // `\\`
-                        0x2F => decoded.push_str("\u{2F}"), // `\/`
-                        0x62 => decoded.push_str("\u{08}"), // `\b`
-                        0x66 => decoded.push_str("\u{0C}"), // `\f`
-                        0x6E => decoded.push_str("\u{0A}"), // `\n`
-                        0x72 => decoded.push_str("\u{0D}"), // `\r`
-                        0x74 => decoded.push_str("\u{09}"), // `\t`
+                        0x22 => decoded.push('\u{22}'), // `\"`
+                        0x5C => decoded.push('\u{5C}'), // `\\`
+                        0x2F => decoded.push('\u{2F}'), // `\/`
+                        0x62 => decoded.push('\u{08}'), // `\b`
+                        0x66 => decoded.push('\u{0C}'), // `\f`
+                        0x6E => decoded.push('\u{0A}'), // `\n`
+                        0x72 => decoded.push('\u{0D}'), // `\r`
+                        0x74 => decoded.push('\u{09}'), // `\t`
 
                         // unicode escape sequences
                         0x75 => {
@@ -585,7 +585,7 @@ impl<'a, 'de> Deserializer<'de> for &'a mut JsonDeserializer<'de> {
         V: Visitor<'de>,
     {
         let f = self.parse_number()?;
-        if f < -9007199254740992.0f64 || f > 9007199254740992.0f64 {
+        if !(-9007199254740992.0f64..=9007199254740992.0f64).contains(&f) {
             self.fail(ErrorCode::OutOfBoundsI64)
         } else {
             visitor.visit_i64(f as i64)

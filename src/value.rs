@@ -129,7 +129,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
         ));
 
         while let Some((key, val)) = map.next_entry()? {
-            if let Some(_) = m.insert(key, val) {
+            if m.insert(key, val).is_some() {
                 return Err(A::Error::custom("map had duplicate key"));
             }
         }
@@ -240,7 +240,7 @@ impl<'de> Visitor<'de> for ContentValueVisitor {
                 }
             }
 
-            if let Some(_) = m.insert(key, val) {
+            if m.insert(key, val).is_some() {
                 return Err(A::Error::custom("map had duplicate key"));
             }
         }
@@ -257,11 +257,7 @@ impl<'de> Visitor<'de> for ContentValueVisitor {
 fn check_type_value(s: &str) -> bool {
     let len = legacy_length(s);
 
-    if len < 3 || len > 53 {
-        false
-    } else {
-        true
-    }
+    !(3..=53).contains(&len)
 }
 
 /// A map with string keys that sorts strings according to
@@ -285,6 +281,11 @@ impl<V> RidiculousStringMap<V> {
             naturals: BTreeMap::new(),
             others: IndexMap::with_capacity(capacity),
         }
+    }
+
+    /// Check if the map is empty.
+    pub fn is_empty(&self) -> bool {
+        self.naturals.is_empty() && self.others.is_empty()
     }
 
     /// Returns the number of elements in the map.

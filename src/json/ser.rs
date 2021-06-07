@@ -253,7 +253,7 @@ where
     fn serialize_f64(self, v: f64) -> Result<Self::Ok, Self::Error> {
         if LegacyF64::is_valid(v) {
             let mut buffer = ryu_ecmascript::Buffer::new();
-            let s = buffer.format::<f64>(v.into());
+            let s = buffer.format::<f64>(v);
             Ok(self.writer.write_all(s.as_bytes())?)
         } else {
             Err(EncodeJsonError::InvalidFloat(v))
@@ -385,7 +385,7 @@ where
     // https://spec.scuttlebutt.nz/feed/datamodel.html#signing-encoding-arrays
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, EncodeJsonError> {
         match _len {
-            None => return Err(EncodeJsonError::UnknownLength),
+            None => Err(EncodeJsonError::UnknownLength),
             Some(len) => {
                 self.begin_array()?;
                 Ok(CollectionSerializer::new(&mut *self, len == 0))
@@ -427,7 +427,7 @@ where
     // https://spec.scuttlebutt.nz/feed/datamodel.html#signing-encoding-objects
     fn serialize_map(self, len_: Option<usize>) -> Result<Self::SerializeMap, EncodeJsonError> {
         match len_ {
-            None => return Err(EncodeJsonError::UnknownLength),
+            None => Err(EncodeJsonError::UnknownLength),
             Some(len) => {
                 self.begin_object()?;
                 Ok(CollectionSerializer::new(&mut *self, len == 0))
