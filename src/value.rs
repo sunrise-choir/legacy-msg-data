@@ -333,7 +333,7 @@ fn is_int_str(s: &str) -> bool {
                     return false;
                 }
 
-                u64::from_str_radix(s, 10).unwrap() < (std::u32::MAX as u64)
+                s.parse::<u64>().unwrap() < (std::u32::MAX as u64)
             } else {
                 false
             }
