@@ -195,7 +195,7 @@ where
         true
     }
 
-    // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-booleans
+    // https://spec.scuttlebutt.nz/feed/datamodel.html#signing-encoding-booleans
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
         let s = if v {
             b"true" as &[u8]
@@ -249,7 +249,7 @@ where
         self.serialize_f64(v as f64)
     }
 
-    // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-floats
+    // https://spec.scuttlebutt.nz/feed/datamodel.html#signing-encoding-floats
     fn serialize_f64(self, v: f64) -> Result<Self::Ok, Self::Error> {
         if LegacyF64::is_valid(v) {
             let mut buffer = ryu_ecmascript::Buffer::new();
@@ -264,7 +264,7 @@ where
         self.serialize_str(&v.to_string())
     }
 
-    // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-strings
+    // https://spec.scuttlebutt.nz/feed/datamodel.html#signing-encoding-strings
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
         self.writer.write_all(b"\"")?;
 
@@ -330,7 +330,7 @@ where
         value.serialize(self)
     }
 
-    // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-null
+    // https://spec.scuttlebutt.nz/feed/datamodel.html#signing-encoding-null
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
         Ok(self.writer.write_all(b"null")?)
     }
@@ -359,7 +359,7 @@ where
         value.serialize(self)
     }
 
-    // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-objects
+    // https://spec.scuttlebutt.nz/feed/datamodel.html#signing-encoding-objects
     fn serialize_newtype_variant<T: ?Sized>(
         self,
         _name: &'static str,
@@ -382,7 +382,7 @@ where
         Ok(())
     }
 
-    // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-arrays
+    // https://spec.scuttlebutt.nz/feed/datamodel.html#signing-encoding-arrays
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, EncodeJsonError> {
         match _len {
             None => Err(EncodeJsonError::UnknownLength),
@@ -405,8 +405,8 @@ where
         self.serialize_seq(Some(len))
     }
 
-    // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-objects
-    // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-arrays
+    // https://spec.scuttlebutt.nz/feed/datamodel.html#signing-encoding-objects
+    // https://spec.scuttlebutt.nz/feed/datamodel.html#signing-encoding-arrays
     fn serialize_tuple_variant(
         self,
         _name: &'static str,
@@ -424,7 +424,7 @@ where
         Ok(CollectionSerializer::new(&mut *self, false))
     }
 
-    // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-objects
+    // https://spec.scuttlebutt.nz/feed/datamodel.html#signing-encoding-objects
     fn serialize_map(self, len_: Option<usize>) -> Result<Self::SerializeMap, EncodeJsonError> {
         match len_ {
             None => Err(EncodeJsonError::UnknownLength),
@@ -443,7 +443,7 @@ where
         self.serialize_map(Some(len))
     }
 
-    // https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-objects
+    // https://spec.scuttlebutt.nz/feed/datamodel.html#signing-encoding-objects
     fn serialize_struct_variant(
         self,
         _name: &'static str,

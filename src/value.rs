@@ -20,17 +20,17 @@ static MAX_ALLOC: usize = 2048;
 /// Represents any valid ssb legacy message value, preserving the order of object entries.
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Value {
-    /// The [null](https://spec.scuttlebutt.nz/datamodel.html#null) value.
+    /// The [null](https://spec.scuttlebutt.nz/feed/datamodel.html#null) value.
     Null,
-    /// A [boolean](https://spec.scuttlebutt.nz/datamodel.html#booleans).
+    /// A [boolean](https://spec.scuttlebutt.nz/feed/datamodel.html#booleans).
     Bool(bool),
-    /// A [float](https://spec.scuttlebutt.nz/datamodel.html#floats).
+    /// A [float](https://spec.scuttlebutt.nz/feed/datamodel.html#floats).
     Float(LegacyF64),
-    /// A [string](https://spec.scuttlebutt.nz/datamodel.html#strings).
+    /// A [string](https://spec.scuttlebutt.nz/feed/datamodel.html#strings).
     String(String),
-    /// An [array](https://spec.scuttlebutt.nz/datamodel.html#arrays).
+    /// An [array](https://spec.scuttlebutt.nz/feed/datamodel.html#arrays).
     Array(Vec<Value>),
-    /// An [object](https://spec.scuttlebutt.nz/datamodel.html#objects).
+    /// An [object](https://spec.scuttlebutt.nz/feed/datamodel.html#objects).
     Object(RidiculousStringMap<Value>),
 }
 
@@ -234,7 +234,7 @@ fn check_type_value(s: &str) -> bool {
 }
 
 /// A map with string keys that sorts strings according to
-/// [object entry order](https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-objects),
+/// [object entry order](https://spec.scuttlebutt.nz/feed/datamodel.html#signing-encoding-objects),
 /// using insertion order for non-int keys.
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub struct RidiculousStringMap<V> {
@@ -292,7 +292,7 @@ impl<V> RidiculousStringMap<V> {
     }
 
     /// Gets an iterator over the entries of the map. It first yields all entries with
-    /// [numeric](https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-objects) keys
+    /// [numeric](https://spec.scuttlebutt.nz/feed/datamodel.html#signing-encoding-objects) keys
     /// in ascending order, and then the remaining entries in the same order in
     /// which they were inserted.
     pub fn iter(&self) -> Iter<V> {
@@ -369,7 +369,7 @@ impl<'a, V> IntoIterator for &'a RidiculousStringMap<V> {
 
 /// An iterator over the entries of a [`RidiculousStringMap`](RidiculousStringMap), first
 /// yielding all entries with
-/// [numeric](https://spec.scuttlebutt.nz/datamodel.html#signing-encoding-objects) keys
+/// [numeric](https://spec.scuttlebutt.nz/feed/datamodel.html#signing-encoding-objects) keys
 /// in ascending order, and then yielding the remaining entries in the same order in
 /// which they were inserted into the map.
 pub struct Iter<'a, V> {

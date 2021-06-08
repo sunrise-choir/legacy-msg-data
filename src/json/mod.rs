@@ -1,6 +1,6 @@
 //! This module implements the json encodings of the legacy ssb data format, both
-//! [signing](https://spec.scuttlebutt.nz/datamodel.html#signing-encoding) and
-//! [json transport](https://spec.scuttlebutt.nz/datamodel.html#json-transport-encoding).
+//! [signing](https://spec.scuttlebutt.nz/feed/datamodel.html#signing-encoding) and
+//! [json transport](https://spec.scuttlebutt.nz/feed/datamodel.html#json-transport-encoding).
 //!
 //! Serialization methods take a boolean to switch between compact json
 //! and the signing encoding.

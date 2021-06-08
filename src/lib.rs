@@ -1,10 +1,10 @@
 //! This crate implements the ssb
-//! [legacy data format](https://spec.scuttlebutt.nz/datamodel.html),
+//! [legacy data format](https://spec.scuttlebutt.nz/feed/datamodel.html),
 //! i.e. the free-form data that forms the content of legacy messages.
 //!
 //! Two encodings are implemented: the
-//! [signing encoding](https://spec.scuttlebutt.nz/datamodel.html#signing-encoding), and the
-//! [json transport encoding](https://spec.scuttlebutt.nz/datamodel.html#json-transport-encoding).
+//! [signing encoding](https://spec.scuttlebutt.nz/feed/datamodel.html#signing-encoding), and the
+//! [json transport encoding](https://spec.scuttlebutt.nz/feed/datamodel.html#json-transport-encoding).
 #![warn(missing_docs)]
 
 extern crate encode_unicode;
@@ -23,7 +23,7 @@ use std::cmp::Ordering;
 use std::fmt;
 
 /// A wrapper around `f64` to indicate that the float is compatible with the ssb legacy message
-/// data model, i.e. it is [neither an infinity, nor `-0.0`, nor a `NaN`](https://spec.scuttlebutt.nz/datamodel.html#floats).
+/// data model, i.e. it is [neither an infinity, nor `-0.0`, nor a `NaN`](https://spec.scuttlebutt.nz/feed/datamodel.html#floats).
 ///
 /// Because a `LegacyF64` is never `NaN`, it can implement `Eq` and `Ord`, which regular `f64`
 /// can not.
@@ -77,7 +77,7 @@ impl LegacyF64 {
     }
 
     /// Checks whether a given `f64`
-    /// [may be used](https://spec.scuttlebutt.nz/datamodel.html#floats) as a `LegacyF64`.
+    /// [may be used](https://spec.scuttlebutt.nz/feed/datamodel.html#floats) as a `LegacyF64`.
     pub fn is_valid(f: f64) -> bool {
         if f == 0.0 {
             f.is_sign_positive()
@@ -132,13 +132,13 @@ pub fn is_i64_valid(n: i64) -> bool {
 }
 
 /// An iterator that yields the
-/// [bytes](https://spec.scuttlebutt.nz/datamodel.html#legacy-hash-computation) needed to compute
+/// [bytes](https://spec.scuttlebutt.nz/feed/datamodel.html#legacy-hash-computation) needed to compute
 /// a hash of some legacy data.
 ///
 /// Created by [`to_weird_encoding`](to_weird_encoding).
 ///
 /// The total number of bytes yielded by this is also the
-/// [length](https://spec.scuttlebutt.nz/datamodel.html#legacy-length-computation) of the data.
+/// [length](https://spec.scuttlebutt.nz/feed/datamodel.html#legacy-length-computation) of the data.
 pub struct WeirdEncodingIterator<'a>(std::iter::Map<std::str::EncodeUtf16<'a>, fn(u16) -> u8>);
 
 impl<'a> Iterator for WeirdEncodingIterator<'a> {
@@ -150,16 +150,16 @@ impl<'a> Iterator for WeirdEncodingIterator<'a> {
 }
 
 /// Create an owned representation of the
-/// [weird encoding](https://spec.scuttlebutt.nz/datamodel.html#legacy-hash-computation)
+/// [weird encoding](https://spec.scuttlebutt.nz/feed/datamodel.html#legacy-hash-computation)
 /// used for hash computation of legacy ssb messages. The number of bytes yielded by this
 /// iterator coincides with the
-/// [length](https://spec.scuttlebutt.nz/datamodel.html#legacy-length-computation)
+/// [length](https://spec.scuttlebutt.nz/feed/datamodel.html#legacy-length-computation)
 /// of the data.
 pub fn to_weird_encoding(s: &str) -> WeirdEncodingIterator {
     WeirdEncodingIterator(s.encode_utf16().map(|x| x as u8))
 }
 
-/// Compute the [length](https://spec.scuttlebutt.nz/datamodel.html#legacy-length-computation)
+/// Compute the [length](https://spec.scuttlebutt.nz/feed/datamodel.html#legacy-length-computation)
 /// of some data. Note that this takes time linear in the length of the data,
 /// so you might want to use a [`WeirdEncodingIterator`](WeirdEncodingIterator)
 /// for computing hash and length in one go.
